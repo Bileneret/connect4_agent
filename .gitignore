@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.nbi
+*.nbc
+
+# Логи и дампы этапа интеграции (появятся на Этапе 5-6)
+logs/
+incidents/
+
+# Служебное
+Thumbs.db
+desktop.ini
