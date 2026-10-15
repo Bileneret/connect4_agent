@@ -20,29 +20,27 @@ def grid(ours_cells=(), theirs_cells=()):
 
 
 def main():
-    # пустая доска — валидна при чьём угодно ходе
+    # пустая доска — валидна
     assert grid_ownership_ok(grid(), True) and grid_ownership_ok(grid(), False)
-    # один камень соперника, наш ход (мы вторые) — ок
+    # один камень (чей угодно), наш ход — валидно (перевес в любую сторону)
     assert grid_ownership_ok(grid(theirs_cells=[(0, 3)]), True)
-    # МИСРИД: тот же камень прочитан как НАШ при нашем ходе → ловится
-    assert not grid_ownership_ok(grid(ours_cells=[(0, 3)]), True)
-    # тот же камень при ИХ ходе — легально (мы начинали и только что сходили)
+    assert grid_ownership_ok(grid(ours_cells=[(0, 3)]), True)
     assert grid_ownership_ok(grid(ours_cells=[(0, 3)]), False)
+    # после нашего хода сайт переключает маркер с задержкой ~0.6-1 с:
+    # «наших на один больше при нашем ходе» — это нормальный транзиент
+    assert grid_ownership_ok(grid(ours_cells=[(0, 0), (0, 1)],
+                                  theirs_cells=[(0, 3)]), True)
     # разница 2 — невалидно в любой момент
     assert not grid_ownership_ok(grid(ours_cells=[(0, 0), (0, 1)]), True)
     assert not grid_ownership_ok(grid(theirs_cells=[(0, 0), (0, 1)]), True)
-    # середина партии: 1 наш против 2 их при нашем ходе — легально
+    assert not grid_ownership_ok(grid(ours_cells=[(0, 0), (0, 1), (0, 2)],
+                                      theirs_cells=[(0, 3)]), False)
+    # середина партии: поровну/на один — всегда ок
     assert grid_ownership_ok(grid(ours_cells=[(0, 0)],
                                   theirs_cells=[(0, 3), (1, 3)]), True)
-    # 2 наших против 1 их при ИХ ходе — легально (мы начинали)
-    assert grid_ownership_ok(grid(ours_cells=[(0, 0), (0, 1)],
-                                  theirs_cells=[(0, 3)]), False)
-    # 2 против 2 при нашем ходе — легально (мы начинали)
     assert grid_ownership_ok(grid(ours_cells=[(0, 0), (0, 1)],
                                   theirs_cells=[(0, 3), (1, 3)]), True)
-    # 1 против 1 при нашем ходе — легально
-    assert grid_ownership_ok(grid(ours_cells=[(0, 0)], theirs_cells=[(0, 3)]), True)
-    print("ИНВАРИАНТ ВЛАДЕНИЯ — ОФЛАЙН: ВСЁ OK")
+    print("ИНВАРИАНТ ВЛАДЕНИЯ (баланс камней) — ОФЛАЙН: ВСЁ OK")
     return 0
 
 

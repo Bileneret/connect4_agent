@@ -195,6 +195,7 @@ class GameLoop:
         self.failures = 0
         self.browser_hwnd = None
         self.last_continue_ts = 0.0
+        self._phantom_since = None   # сторож «ход не дошёл до сервера»
         self.stats = {"book": 0, "tactical_win": 0, "tactical_block": 0,
                       "exact": 0, "emergency": 0, "clicks": 0, "retries": 0}
 
@@ -255,6 +256,21 @@ class GameLoop:
                 self.persist()
                 if e.kind in ("GAME_OVER", "DISCONNECT") and self.ponder is not None:
                     self.ponder.stop()
+        # сторож «фантомной фишки»: клик отрисовался, но сервер ход не принял —
+        # сайт считает, что ходить нам (часы тикают), а щит moved_this_turn
+        # блокирует решение → гарантированный форфейт. Держится > 6 с — снимаем.
+        if snap.my_turn and self.session.st.moved_this_turn:
+            if self._phantom_since is None:
+                self._phantom_since = time.time()
+            elif time.time() - self._phantom_since > 6.0:
+                self.log("[loop] ход, похоже, не дошёл до сервера (>6 с очередь наша) — "
+                         "снимаю щит «уже сходили» и играю заново")
+                self._dump_incident("phantom_move", {"moves": snap.moves,
+                                                     "heights": snap.heights})
+                self.session.st.moved_this_turn = False
+                self._phantom_since = None
+        else:
+            self._phantom_since = None
         if self.paused or not snap.my_turn or self.session.st.moved_this_turn:
             return None
 
