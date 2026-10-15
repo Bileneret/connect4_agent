@@ -296,6 +296,8 @@ class GameLoop:
 def run_forever(loop: GameLoop, tick_s: float = 0.25):
     loop.log("[loop] запущен. F7 — Auto/Hint, F8 — пауза, F9 — ресинк, Esc — выход. "
              "FAILSAFE: резкий увод курсора в угол ставит на паузу.")
+    loop.paused_by_failures = False
+    loop.paused_since = 0.0
     try:
         while loop.running:
             try:
@@ -305,8 +307,19 @@ def run_forever(loop: GameLoop, tick_s: float = 0.25):
             except Exception as exc:  # noqa: BLE001 — цикл не должен падать
                 loop.log(f"[loop] ошибка шага: {type(exc).__name__}: {exc}")
                 loop.failures += 1
-                if loop.failures >= 3:
+                time.sleep(1.0)  # перезагрузки страниц/навигации не должны «съедать» счётчик
+                if loop.failures >= 10 and not loop.paused:
                     loop.paused = True
+                    loop.paused_by_failures = True
+                    loop.paused_since = time.time()
+            # самовосстановление: пауза от ошибок снимается сама через 30 с
+            # (ручная пауза F8 остаётся «залипающей»)
+            if (loop.paused and getattr(loop, "paused_by_failures", False)
+                    and time.time() - loop.paused_since > 30):
+                loop.paused = False
+                loop.paused_by_failures = False
+                loop.failures = 0
+                loop.log("[loop] авто-снятие паузы после ошибок — продолжаю")
             time.sleep(tick_s)
     finally:
         loop.persist()
