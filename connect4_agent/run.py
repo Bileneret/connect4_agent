@@ -59,15 +59,74 @@ def selftest():
     return 0
 
 
+def live(auto_tab=True):
+    """Живой автопилот: CDP-подключение, книга, движок, физическая мышь (Этапы 5-7)."""
+    from config import TARGET_URL_HINT
+    from browser.cdp_connector import connect_tab, find_debug_ports, list_tabs
+    from engine.opening_book import OpeningBook
+    from engine.solver_numba import SolverEngine
+    from actuator.hotkeys import HotkeyDispatcher
+    from actuator.mouse_controller import MouseController
+    from state.game_loop import GameLoop, run_forever
+    from state.session_manager import SessionManager
+
+    ports = find_debug_ports()
+    if not ports:
+        print("Нет живого порта отладки CDP. Сначала запустите браузер с "
+              "--remote-debugging-port=9222 (см. browser/cdp_connector.py).")
+        return 1
+    tabs = []
+    for p in ports:
+        tabs.extend(list_tabs(p))
+    target = next((t for t in tabs if TARGET_URL_HINT in t.url), None)
+    if target is None:
+        print("Вкладка papergames.io не найдена. Откройте игру и повторите.")
+        return 1
+    conn = connect_tab(target)
+    print(f"Подключено к: {target.title} | {target.url}")
+
+    engine = SolverEngine()
+    book = OpeningBook()
+    print(f"Книга: {'загружена, ' + format(len(book.keys), ',') + ' ключей' if book.available else 'нет'}")
+
+    session = SessionManager(state_path=ROOT / "logs" / "session_state.json")
+    mouse = MouseController()
+    loop = GameLoop(page=conn.page, engine=engine, book=book, session=session,
+                    mouse=mouse, apply_clicks=True, mode="auto")
+
+    dispatcher = HotkeyDispatcher()
+    dispatcher.bind("toggle_mode", lambda: setattr(
+        loop, "mode", "hint" if loop.mode == "auto" else "auto"))
+    dispatcher.bind("pause", lambda: setattr(loop, "paused", not loop.paused))
+    dispatcher.bind("resync", lambda: print("[run] F9: ресинк (логика в цикле)"))
+    dispatcher.bind("exit", lambda: setattr(loop, "running", False))
+    try:
+        dispatcher.register()
+    except Exception as exc:  # noqa: BLE001 — без админ-прав хуки могут не встать
+        print(f"[run] глобальные хоткеи недоступны: {exc}")
+    try:
+        run_forever(loop)
+    finally:
+        try:
+            dispatcher.unregister()
+        except Exception:
+            pass
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Connect4 бот для PaperGames.io")
     parser.add_argument("--selftest", action="store_true",
-                        help="зарезервировано; до Этапа 5 выполняется проверка окружения")
-    parser.parse_args()
+                        help="проверка окружения и ядра (по умолчанию)")
+    parser.add_argument("--live", action="store_true",
+                        help="живой автопилот в уже открытой вкладке papergames.io")
+    args = parser.parse_args()
 
     enable_dpi_awareness()
 
-    # Этап 1: единственный режим — selftest; игровой цикл появится на Этапе 5.
+    if args.live:
+        return live()
+    # Этап 1: без --live — проверка окружения и ядра.
     return selftest()
 
 
