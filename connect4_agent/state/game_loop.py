@@ -139,6 +139,7 @@ class GameLoop:
         self.log = log
         self.last_opponent_move_ts = 0.0
         self.failures = 0
+        self.browser_hwnd = None
         self.stats = {"book": 0, "tactical_win": 0, "tactical_block": 0,
                       "exact": 0, "emergency": 0, "clicks": 0, "retries": 0}
 
@@ -198,10 +199,36 @@ class GameLoop:
         return "click_failed"
 
     # --- клик и верификация -------------------------------------------------
+    def _ensure_click_target(self, x: float, y: float) -> bool:
+        """Q38: поднять окно браузера и убедиться, что точка клика принадлежит ему."""
+        from actuator.mouse_controller import (
+            ensure_foreground, find_browser_window, top_level_at,
+        )
+        if self.browser_hwnd is None:
+            self.browser_hwnd = find_browser_window()
+        if not self.browser_hwnd:
+            return True  # окно не нашли — не блокируем (best effort)
+        ensure_foreground(self.browser_hwnd)
+        time.sleep(0.12)
+        at = top_level_at(int(x), int(y))
+        if at != self.browser_hwnd:
+            self.log("[loop] точка клика перекрыта другим окном (Q38), поднимаю браузер")
+            ensure_foreground(self.browser_hwnd)
+            time.sleep(0.2)
+            at = top_level_at(int(x), int(y))
+            if at != self.browser_hwnd:
+                return False
+        return True
+
     def _click_and_verify(self, col: int, snap) -> bool:
         radius_phys = (snap.board_rect["w"] / 7 / 2) * snap.dpr
+        waits = (CLICK_VERIFY_MS / 1000.0, 1.2, 1.2)  # анимация фишки дорисуется не сразу
         for attempt in range(1 + CLICK_MAX_RETRIES):
             cx, cy = snap.col_center_screen_px(col)
+            if self.apply_clicks and not self._ensure_click_target(cx, cy):
+                self.log("[loop] окно браузера не поднимается наверх — пауза")
+                self.paused = True
+                return False
             if attempt:
                 self.stats["retries"] += 1
                 self.log(f"[loop] повторный клик (попытка {attempt + 1})")
@@ -213,7 +240,7 @@ class GameLoop:
                 self.log(f"[loop] FAILSAFE/ошибка мыши: {exc} — пауза")
                 return False
             self.stats["clicks"] += 1
-            time.sleep(CLICK_VERIFY_MS / 1000.0)
+            time.sleep(waits[min(attempt, len(waits) - 1)])
             snap2 = self.read_fn(self.page)
             if snap2 and snap2.grid and (snap2.moves == snap.moves + 1
                                          or not snap2.my_turn):

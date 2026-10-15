@@ -67,7 +67,7 @@ _PAPERGAMES_READ_JS = r"""
   const dist = (a, b) => a && b ? Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]) : 1e9;
 
   const out = {errors: [], grid: [], heights: [], col_centers: [], board_rect: null,
-               my_turn: false, timers: {}, dpr: window.devicePixelRatio || 1,
+               moves: 0, my_turn: false, timers: {}, dpr: window.devicePixelRatio || 1,
                screen_x: window.screenX, screen_y: window.screenY,
                chrome_top: Math.max(0, window.outerHeight - window.innerHeight),
                covered: []};

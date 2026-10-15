@@ -43,8 +43,6 @@ class MouseController:
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
         self._last_pos: tuple[float, float] | None = None
-
-    # --- построение траектории ---------------------------------------------
     def plan_column_click(self, cell_center: tuple[float, float],
                           cell_radius: float,
                           start: tuple[float, float] | None = None) -> ClickPlan:
@@ -101,3 +99,52 @@ class MouseController:
         pyautogui.mouseUp()
         self._last_pos = plan.target
         return plan
+
+
+# --- окно браузера и гарантия точки клика (Q38) -----------------------------
+def find_browser_window(title_parts=("Connect 4", "Microsoft Edge", "Google Chrome",
+                                     "Brave", "Opera", "Yandex")):
+    """HWND видимого окна браузера по частям заголовка (EnumWindows)."""
+    import ctypes
+    import ctypes.wintypes as wt
+
+    user32 = ctypes.windll.user32
+    found = []
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def enum_cb(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd, buf, 256)
+        title = buf.value or ""
+        if any(part.lower() in title.lower() for part in title_parts):
+            found.append(hwnd)
+            return False
+        return True
+
+    user32.EnumWindows(enum_cb, 0)
+    return found[0] if found else None
+
+
+def ensure_foreground(hwnd) -> bool:
+    """Поднять окно наверх (развернуть, если свёрнуто)."""
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    return bool(user32.SetForegroundWindow(hwnd))
+
+
+def top_level_at(x: int, y: int):
+    """HWND верхнеуровневого окна, которому принадлежит точка экрана."""
+    import ctypes
+    import ctypes.wintypes as wt
+
+    user32 = ctypes.windll.user32
+    hwnd = user32.WindowFromPoint(wt.POINT(int(x), int(y)))
+    if not hwnd:
+        return None
+    return user32.GetAncestor(hwnd, 2)  # GA_ROOT
+
