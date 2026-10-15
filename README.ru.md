@@ -73,16 +73,16 @@ flowchart LR
         CDP["CDP-ввод<br/>доверенные события, курсор ОС не двигается"]
     end
 
-    UI -->|видимый DOM| DOM
-    UI -.->|пиксели экрана| VIS
+    UI --> DOM
+    UI -.-> VIS
     DOM --> VAL
     VIS --> VAL
     VAL --> LOOP
     LOOP --> BOOK
     LOOP --> SOL
     POND -.-> SOL
-    LOOP -->|выбор колонки| CDP
-    CDP -->|доверенный клик, 0.6-0.8 с| UI
+    LOOP --> CDP
+    CDP --> UI
 ```
 
 Структура репозитория:

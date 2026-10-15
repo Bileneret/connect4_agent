@@ -74,16 +74,16 @@ flowchart LR
         CDP["CDP input actuator<br/>trusted events, no OS cursor"]
     end
 
-    UI -->|visible DOM| DOM
-    UI -.->|screen fallback| VIS
+    UI --> DOM
+    UI -.-> VIS
     DOM --> VAL
     VIS --> VAL
     VAL --> LOOP
     LOOP --> BOOK
     LOOP --> SOL
     POND -.-> SOL
-    LOOP -->|column choice| CDP
-    CDP -->|trusted click, 0.6-0.8 s| UI
+    LOOP --> CDP
+    CDP --> UI
 ```
 
 Repository layout:
