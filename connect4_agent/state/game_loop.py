@@ -223,6 +223,7 @@ class GameLoop:
                 self.session.update(None, now=time.time())  # GAME_OVER
                 self.persist()
                 self.log("[loop] раунд/матч завершён — проверяю модал продолжения")
+            self._clear_overlay()  # вне партии оверлей не нужен
             self._maybe_continue_round()
             return None
         events = self.session.update(snap)
@@ -302,6 +303,40 @@ class GameLoop:
         return "click_failed"
 
     # --- клик и верификация -------------------------------------------------
+    _FRESH_TARGET_JS = r"""
+    (col) => {
+      const cells = Array.from(document.querySelectorAll('.grid-item'));
+      const inCol = cells.filter(c => {
+        const m = String(c.className).match(/cell-\d+-(\d+)/);
+        return m && (+m[1] - 1) === col;
+      });
+      if (!inCol.length) return null;
+      const rc = el => el.getBoundingClientRect();
+      const bottom = inCol.reduce((a, b) => rc(a).y > rc(b).y ? a : b);
+      const r = rc(bottom);
+      return {cx: r.x + r.width / 2, cy: r.y + r.height / 2, radius: r.width / 2,
+              dpr: window.devicePixelRatio || 1,
+              screen_x: window.screenX, screen_y: window.screenY,
+              chrome_top: Math.max(0, window.outerHeight - window.innerHeight)};
+    }
+    """
+
+    def _fresh_click_target(self, col: int):
+        """Свежие координаты цели прямо перед кликом (реклама может сдвинуть вёрстку)."""
+        try:
+            res = self.page.evaluate(self._FRESH_TARGET_JS, col)
+        except Exception:  # noqa: BLE001
+            return None
+        return res if (res and "cx" in res) else None
+
+    def _clear_overlay(self):
+        """Убрать оверлей вне партии (после матча/раунда)."""
+        try:
+            from browser import overlay
+            overlay.clear(self.page)
+        except Exception:  # noqa: BLE001
+            pass
+
     def _ensure_click_target(self, x: float, y: float) -> bool:
         """Q38: поднять окно браузера и убедиться, что точка клика принадлежит ему."""
         from actuator.mouse_controller import (
@@ -328,7 +363,15 @@ class GameLoop:
         waits = (CLICK_VERIFY_MS / 1000.0, 1.2, 1.2)  # анимация фишки дорисуется не сразу
         t_start = time.time()
         for attempt in range(1 + CLICK_MAX_RETRIES):
-            cx, cy = snap.col_center_screen_px(col)
+            # свежие координаты: если реклама/баннер сдвинули вёрстку после снимка —
+            # кликаем по фактическому положению клетки в момент клика
+            fresh = self._fresh_click_target(col) if self.apply_clicks else None
+            if fresh is not None:
+                cx = (fresh["screen_x"] + fresh["cx"]) * fresh["dpr"]
+                cy = (fresh["screen_y"] + fresh["chrome_top"] + fresh["cy"]) * fresh["dpr"]
+                radius_phys = fresh["radius"] * fresh["dpr"]
+            else:
+                cx, cy = snap.col_center_screen_px(col)
             if self.apply_clicks and not self._ensure_click_target(cx, cy):
                 self.log("[loop] окно браузера не поднимается наверх — пауза")
                 self.paused = True
