@@ -98,6 +98,12 @@ def _negamax(position, mask, moves, alpha, beta,
     for k in range(n):
         col = np.int64(col_row[moves, k])
         move_bit = possible & COLUMN_MASK[col]
+        if move_bit == _U0:
+            # повреждённый список ходов (гонка на ОБЩИХ буферах сортировки между
+            # потоками: на той же глубине чужая позиция перезаписывает col_row) —
+            # в невалидного ребёнка не уходим; nodes[1] — диагностический счётчик
+            nodes[1] += 1
+            continue
         cpos, cmask = play_bit(position, mask, move_bit)
         m_next = moves + 1
         if first:
@@ -165,14 +171,27 @@ class SolverEngine:
 
     def __init__(self, max_gb=4.0, ram_fraction=0.40, min_mb=128):
         self.tt = allocate_transposition_table(max_gb, ram_fraction, min_mb)
-        self._sc_row = np.zeros((_MAX_MOVES, WIDTH), dtype=np.int64)
-        self._col_row = np.zeros((_MAX_MOVES, WIDTH), dtype=np.int8)
-        self._nodes = np.zeros(1, dtype=np.int64)
+        self._sc_row, self._col_row = self.make_scratch()
+        self._nodes = np.zeros(2, dtype=np.int64)   # [0] узлы, [1] невалидные дети (диагн.)
+
+    def make_scratch(self):
+        """Своя пара буферов сортировки ходов для КАЖДОГО потока поиска.
+
+        Общие буферы на одной глубине — гонка: чужой список ходов даёт ход вне
+        своей позиции → невалидный ребёнок → ложные оценки (баг серии 16:20).
+        """
+        return (np.zeros((_MAX_MOVES, WIDTH), dtype=np.int64),
+                np.zeros((_MAX_MOVES, WIDTH), dtype=np.int8))
 
     # --- служебное ---------------------------------------------------------
     @property
     def nodes(self):
         return int(self._nodes[0])
+
+    @property
+    def invalid_moves(self):
+        """Счётчик невалидных детей (диагностика гонок сортировки); норма — 0."""
+        return int(self._nodes[1])
 
     @property
     def tt_bytes(self):
@@ -191,17 +210,22 @@ class SolverEngine:
         """Строка ходов '1'..'7' -> (position, mask, moves)."""
         return load_position(seq)
 
-    def solve(self, position, mask, moves=0) -> int:
-        """Точная оценка позиции с точки зрения ходящего игрока."""
+    def solve(self, position, mask, moves=0, scratch=None) -> int:
+        """Точная оценка позиции с точки зрения ходящего игрока.
+
+        scratch — своя пара (sc_row, col_row) для параллельных потоков; без неё
+        используется буфер движка (только для основного потока!).
+        """
+        sc, cr = scratch if scratch is not None else (self._sc_row, self._col_row)
         return int(_solve_root(position, mask, moves,
                                self.tt["entry"], self.tt["check"], self.tt["pairs"],
-                               self._sc_row, self._col_row, self._nodes))
+                               sc, cr, self._nodes))
 
     def solve_sequence(self, seq: str) -> int:
         position, mask, moves = self.load_sequence(seq)
         return self.solve(position, mask, moves)
 
-    def best_column(self, position, mask, moves=0):
+    def best_column(self, position, mask, moves=0, scratch=None):
         """Точный лучший ход: оценка каждого ответа соперника полным решением.
 
         Возвращает (лучшая колонка 0..6, best_score, [(колонка, оценка) DESC]).
@@ -217,7 +241,7 @@ class SolverEngine:
                     score = win_score
                 else:
                     cpos, cmask = play_bit(position, mask, np.uint64(bit))
-                    score = -self.solve(cpos, cmask, moves + 1)
+                    score = -self.solve(cpos, cmask, moves + 1, scratch=scratch)
                 results.append((c, score))
         results.sort(key=lambda t: t[1], reverse=True)
         return results[0][0], results[0][1], results

@@ -30,9 +30,10 @@ class PonderManager:
     """Многопоточный предрасчёт веток соперника на общем движке.
 
     engine — единственный SolverEngine на процесс: все потоки делят его ТТ
-    (lockless-записи безопасны), счётчик узлов и scratch-буферы сортировки
-    остаются общими: scratch-строки расчерчены по глубине хода, поэтому
-    одновременные поиски не пересекаются по памяти.
+    (lockless-записи безопасны) и счётчик узлов. Буферы сортировки ходов —
+    СВОИ у каждого потока: общие на одной глубине давали гонку (чужой список
+    подставлял ход вне позиции, в т.ч. полную колонну) → negamax уходил в
+    «фантомного ребёнка» и выдавал ложные оценки (баг серии 16:20).
     """
 
     def __init__(self, engine, workers=None):
@@ -44,6 +45,7 @@ class PonderManager:
         self._results = {}      # col -> точная оценка (с точки зрения соперника)
         self._active = []       # колонки, находящиеся в предрасчёте
         self._base = None       # (position, mask, moves) нашей позиции после хода
+        self._gen = 0           # поколение запуска: старые воркеры обязаны выйти
 
     # --- публичный API ------------------------------------------------------
     @property
@@ -72,17 +74,24 @@ class PonderManager:
         with self._lock:
             self._results.clear()
             self._active = list(cols)
+        self._gen += 1
+        gen = self._gen
         self._stop.clear()
         per = max(1, len(cols) // max(1, self._workers) + (len(cols) % self._workers != 0))
         self._threads = []
         for i in range(0, len(cols), per):
             chunk = cols[i:i + per]
-            t = threading.Thread(target=self._worker, args=(base, chunk), daemon=True)
+            t = threading.Thread(target=self._worker, args=(base, chunk, gen), daemon=True)
             t.start()
             self._threads.append(t)
 
     def stop(self, timeout=1.0):
-        """Прервать предрасчёт (потоки завершаются после текущего solve-вызова)."""
+        """Прервать предрасчёт (воркеры выходят после текущего solve-вызова).
+
+        ВАЖНО: флаг остановки НЕ снимается здесь — иначе «застрявшие» воркеры
+        продолжают считать свои колонки минутами (гонка с основным потоком).
+        Снимается флаг только в start() для нового поколения.
+        """
         self._stop.set()
         for t in self._threads:
             t.join(timeout=timeout)
@@ -106,20 +115,24 @@ class PonderManager:
         """Бит первой пустой клетки колонки col (possible несёт именно её)."""
         return (int(mask) + int(BOTTOM_MASK)) & int(BOARD_MASK) & int(COLUMN_MASK[col])
 
-    def _worker(self, base, cols):
+    def _worker(self, base, cols, gen):
         position, mask, moves = base
+        scratch = self.engine.make_scratch()   # СВОЯ пара буферов сортировки:
+        # иначе на одной глубине потоки перезаписывают списки ходов друг друга
         for col in cols:
-            if self._stop.is_set():
+            if self._stop.is_set() or self._gen != gen:
                 return
             b = self._move_bit(int(mask), col)
             if not b:
                 continue
             cp, cm = play_bit(np.uint64(position), np.uint64(mask), np.uint64(b))
             try:
-                score = self.engine.solve(cp, cm, moves + 1)
+                score = self.engine.solve(cp, cm, moves + 1, scratch=scratch)
             except ValueError:
                 continue
             with self._lock:
+                if self._gen != gen:      # устаревший воркер не пишет в новые результаты
+                    return
                 self._results[col] = score
                 if col in self._active:
                     self._active.remove(col)
