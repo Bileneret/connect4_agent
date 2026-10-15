@@ -15,10 +15,13 @@ import time
 
 
 def human_click(page, cx: float, cy: float, radius: float = 20.0, rng=None) -> None:
-    """Клик в CSS-координаты (cx, cy) страницы через CDP.
+    """Клик в CSS-координаты (cx, cy) страницы через CDP — минимум операций.
 
-    radius — половина ширины клетки: точка клика гауссовым сдвигом разбрасывается
-    внутри круга радиуса radius/2 (как в физическом MouseController).
+    ВАЖНО (найдено на живой серии): каждый page.mouse.* — это round-trip к
+    браузеру, под нагрузкой (ponder+браузер) он стоит до ~0.6 с. Пошаговая
+    траектория из десятков вызовов растягивала клик до 17-22 с и съедала
+    40-секундный лимит хода. Поэтому: точка (гауссов сдвиг внутри клетки) +
+    один перелёт (mouse.move со steps) + атомарный click(delay).
     """
     rng = rng or random
     r = max(3.0, radius * 0.5)
@@ -28,33 +31,9 @@ def human_click(page, cx: float, cy: float, radius: float = 20.0, rng=None) -> N
         dx, dy = dx * r / d, dy * r / d
     tx, ty = cx + dx, cy + dy
 
-    # старт — последняя известная CDP-позиция «мыши» (для непрерывности пути)
     try:
-        sx, sy = page.evaluate("() => [window.__c4_mx || 0, window.__c4_my || 0]")
-    except Exception:  # noqa: BLE001
-        sx, sy = tx, max(0.0, ty - 150.0)
-    if not sx and not sy:
-        sx, sy = tx, max(0.0, ty - 150.0)
-
-    # квадратичная Безье со срединным выносом (bow), как в физическом плане
-    dist = math.hypot(tx - sx, ty - sy)
-    bow = rng.uniform(-1.0, 1.0) * max(6.0, dist * 0.12)
-    mx, my = (sx + tx) / 2.0, (sy + ty) / 2.0
-    nx, ny = -(ty - sy), (tx - sx)
-    nl = math.hypot(nx, ny) or 1.0
-    c2x, c2y = mx + nx / nl * bow, my + ny / nl * bow
-
-    steps = rng.randint(14, 26)
-    for i in range(1, steps + 1):
-        t = i / steps
-        x = (1 - t) ** 2 * sx + 2 * (1 - t) * t * c2x + t ** 2 * tx
-        y = (1 - t) ** 2 * sy + 2 * (1 - t) * t * c2y + t ** 2 * ty
-        page.mouse.move(x, y)
-        time.sleep(rng.uniform(0.004, 0.012))
-    try:
-        page.evaluate("(p) => { window.__c4_mx = p[0]; window.__c4_my = p[1]; }", [tx, ty])
+        page.mouse.move(tx, ty, steps=rng.randint(3, 6))
     except Exception:  # noqa: BLE001
         pass
-    page.mouse.down()
-    time.sleep(rng.uniform(0.040, 0.075))
-    page.mouse.up()
+    time.sleep(rng.uniform(0.03, 0.09))
+    page.mouse.click(tx, ty, delay=rng.randint(45, 80))
