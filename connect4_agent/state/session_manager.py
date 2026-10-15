@@ -28,7 +28,9 @@ from config import (  # noqa: E402
     DISCONNECT_IDLE_S, GAME_TIME_LIMIT_S, MOVE_TIME_LIMIT_S,
 )
 
-CLICK_MARGIN_S = 6.0   # запас на клик/верификацию/повторы внутри лимита хода
+CLICK_MARGIN_S = 8.0   # запас на клик/верификацию/повторы ВНУТРИ лимита хода
+# (6.0 не хватало: размышление могло занять весь бюджет до резерва, а на клик
+#  и верификацию с повторами нужно до 3-6 с — серия ловила тайм-ауты)
 
 
 @dataclass
@@ -182,7 +184,9 @@ class SessionManager:
         if self.st.turn_started_ts is not None:
             deadlines.append(self.st.turn_started_ts + MOVE_TIME_LIMIT_S - CLICK_MARGIN_S)
         if self.st.our_time_left_s is not None:
-            deadlines.append(now + max(1.0, self.st.our_time_left_s - 2.0))
+            # тот же запас, что и в пер-ходовом лимите: к моменту клика должен
+            # остаться реальный люфт на клик+верификацию (иначе тайм-аут)
+            deadlines.append(now + max(2.0, self.st.our_time_left_s - CLICK_MARGIN_S))
         return min(deadlines) if deadlines else None
 
     def budget_left(self, now: float | None = None) -> float | None:
