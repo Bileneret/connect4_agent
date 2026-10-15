@@ -127,6 +127,52 @@ def find_browser_window(title_parts=("Connect 4", "Microsoft Edge", "Google Chro
     return found[0] if found else None
 
 
+def find_browser_window_for_port(port: int):
+    """HWND главного окна браузера, запущенного с этим отладочным портом.
+
+    Детерминированно: по командной строке процесса ищем `--remote-debugging-port=<port>`,
+    затем среди видимых окон с этим PID берём окно класса Chrome_WidgetWin_1.
+    Нужно потому, что при нескольких окнах браузера заголовки похожи.
+    """
+    import ctypes
+    import ctypes.wintypes as wt
+    import subprocess
+
+    ps = (
+        "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe' or Name='chrome.exe' "
+        "or Name='brave.exe'\" | "
+        f"Where-Object {{$_.CommandLine -like '*remote-debugging-port={port}*'}} | "
+        "Select-Object -First 1 -ExpandProperty ProcessId"
+    )
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                             capture_output=True, text=True, timeout=25)
+        pid = int(out.stdout.strip().splitlines()[0])
+    except Exception:
+        return None
+
+    user32 = ctypes.windll.user32
+    found = []
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def enum_cb(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        wpid = wt.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
+        if wpid.value != pid:
+            return True
+        cls = ctypes.create_unicode_buffer(64)
+        user32.GetClassNameW(hwnd, cls, 64)
+        if cls.value.startswith("Chrome_WidgetWin") and user32.GetWindow(hwnd, 4) == 0:
+            found.append(hwnd)   # 4 = GW_OWNER: главное окно без владельца
+            return False
+        return True
+
+    user32.EnumWindows(enum_cb, 0)
+    return found[0] if found else None
+
+
 def ensure_foreground(hwnd) -> bool:
     """Поднять окно наверх (развернуть, если свёрнуто)."""
     import ctypes

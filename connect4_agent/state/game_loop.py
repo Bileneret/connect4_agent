@@ -165,10 +165,12 @@ class GameLoop:
 
     def __init__(self, page, engine, book, session, mouse,
                  read_fn=None, apply_clicks=True, mode="auto", log=print,
-                 think_cap_s=20.0, ponder=None, human_rhythm=True):
+                 think_cap_s=20.0, ponder=None, human_rhythm=True,
+                 browser_port=None):
         if read_fn is None:
             from browser.dom_reader import read_papergames
             read_fn = read_papergames
+        self.browser_port = browser_port
         self.page = page
         self.engine = engine
         self.book = book
@@ -340,10 +342,15 @@ class GameLoop:
     def _ensure_click_target(self, x: float, y: float) -> bool:
         """Q38: поднять окно браузера и убедиться, что точка клика принадлежит ему."""
         from actuator.mouse_controller import (
-            ensure_foreground, find_browser_window, top_level_at,
+            ensure_foreground, find_browser_window, find_browser_window_for_port,
+            top_level_at,
         )
         if self.browser_hwnd is None:
-            self.browser_hwnd = find_browser_window()
+            # детерминированно по порту отладки (окна браузеров могут быть похожи)
+            if self.browser_port:
+                self.browser_hwnd = find_browser_window_for_port(self.browser_port)
+            if self.browser_hwnd is None:
+                self.browser_hwnd = find_browser_window()
         if not self.browser_hwnd:
             return True  # окно не нашли — не блокируем (best effort)
         ensure_foreground(self.browser_hwnd)

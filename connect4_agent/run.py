@@ -85,13 +85,15 @@ def live(auto=True):
             print("Вкладка papergames.io не найдена. Откройте игру и повторите.")
             return 1
         conn = connect_tab(target)
+        browser_port = target.port
     else:
         # Q1: интерактивный выбор браузера/вкладки (нумерованный список)
         from browser.cdp_connector import choose_and_connect
         conn = choose_and_connect(interactive=True)
         if conn is None:
             return 1
-    print(f"Подключено к: {conn.info.title} | {conn.info.url}")
+        browser_port = conn.info.port
+    print(f"Подключено к: {conn.info.title} | {conn.info.url} (порт {browser_port})")
 
     engine = SolverEngine()
     book = OpeningBook()
@@ -104,7 +106,8 @@ def live(auto=True):
               f"ходов {session.st.moves} (Q45)")
     mouse = MouseController()
     loop = GameLoop(page=conn.page, engine=engine, book=book, session=session,
-                    mouse=mouse, apply_clicks=True, mode="auto", ponder=ponder)
+                    mouse=mouse, apply_clicks=True, mode="auto", ponder=ponder,
+                    browser_port=browser_port)
 
     dispatcher = HotkeyDispatcher()
     dispatcher.bind("toggle_mode", lambda: setattr(
