@@ -25,6 +25,24 @@ HISTORY_RE = re.compile(r"\(\d+\)(\d)(\d)\s*Connect\s*4", re.S)
 # Живой формат строки (проверено 16.10): "Player (1500)Sofia (2669)10 Connect 4 <дата>"
 # где "10" = наш счёт 1, счёт соперника 0 (победа); "01" = поражение.
 DATE_RE = re.compile(r"(Oct|Nov|Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep)\s+\d+,\s+\d{4},\s+[\d:]+\s+[AP]M")
+# финальный экран матча: "16 Player 02:47 0 1000 Carlito 03:41 1"
+SCORE_RE = re.compile(r"([A-Za-z0-9_@.\-]+)\s+(\d{1,2}:\d{2})\s+(\d+)")
+
+
+def parse_end_screen(body: str):
+    """Результат прямо с финального экрана (без навигации в History)."""
+    if not body:
+        return None, "финальный экран пуст"
+    ours = theirs = None
+    for m in SCORE_RE.finditer(body):
+        name, score = m.group(1), int(m.group(3))
+        if name == "Player" and ours is None:
+            ours = score
+        elif name != "Player" and theirs is None and not name.isdigit():
+            theirs = score
+    if ours is not None and theirs is not None:
+        return ours > theirs, f"{ours}:{theirs} (финальный экран)"
+    return None, f"финальный экран не распознан: {body[:120]}"
 
 
 def toast(text: str):
@@ -101,8 +119,11 @@ def start_fresh_game(page) -> bool:
     return False
 
 
-def wait_match_end(page, max_s: float = 420.0) -> bool:
-    """Ждём появления доски и затем её исчезновения (матч завершён)."""
+def wait_match_end(page, max_s: float = 420.0):
+    """Ждём появления доски и затем её исчезновения (матч завершён).
+
+    Возврат: (finished, финальный_текст_страницы).
+    """
     seen = False
     t0 = time.time()
     while time.time() - t0 < max_s:
@@ -111,9 +132,15 @@ def wait_match_end(page, max_s: float = 420.0) -> bool:
             seen = True
         elif seen:
             time.sleep(2.0)  # дать странице до-перейти
-            return True
+            body = ""
+            try:
+                body = page.evaluate(
+                    "() => document.body.innerText.replace(/\\s+/g, ' ').slice(0, 600)")
+            except Exception:  # noqa: BLE001
+                pass
+            return True, body
         time.sleep(2.0)
-    return False
+    return False, ""
 
 
 def read_last_result(page):
@@ -128,17 +155,19 @@ def read_last_result(page):
               const seen = [];
               for (const el of document.querySelectorAll('div, li, tr')) {
                 const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                if (t.includes('Player') && t.includes('Sofia') && t.length < 400) seen.push(t);
+                if (t.includes('Player') && t.includes('Connect 4')
+                        && t.includes('(') && t.length < 300) seen.push(t);
               }
-              return [...new Set(seen)].slice(0, 3);
+              return [...new Set(seen)].slice(0, 5);
             }""")
             if not rows:
                 return None, "нет строк истории"
-            m = HISTORY_RE.search(rows[0])
-            if not m:
-                return None, rows[0][:160]
-            ours, theirs = int(m.group(1)), int(m.group(2))
-            return ours > theirs, f"{ours}:{theirs} | {rows[0][:120]}"
+            for row in rows:                       # первая строка, которая парсится
+                m = HISTORY_RE.search(row)
+                if m:
+                    ours, theirs = int(m.group(1)), int(m.group(2))
+                    return ours > theirs, f"{ours}:{theirs} | {row[:120]}"
+            return None, rows[0][:160]
         except Exception as exc:  # noqa: BLE001
             last = f"ошибка чтения истории (попытка {attempt}): {type(exc).__name__}"
             time.sleep(1.0)
@@ -177,14 +206,17 @@ def main():
                     unknown += 1
                     continue
             print(f"[series] партия {i} началась, ждём финал...", flush=True)
-            ended = wait_match_end(page)
+            ended, final_body = wait_match_end(page)
             if not ended:
                 print("[series] таймаут ожидания финала — пропуск итерации", flush=True)
                 results.append(("таймаут ожидания", i))
                 unknown += 1
                 continue
-            time.sleep(2.5)
-            won, detail = read_last_result(page)
+            time.sleep(2.0)
+            won, detail = parse_end_screen(final_body)
+            if won is None:                    # фолбэк: History (если финал не распознан)
+                won, detail = read_last_result(page)
+                back_to_game_page(page)
             if won is True:
                 wins += 1
                 mark = "ПОБЕДА"
