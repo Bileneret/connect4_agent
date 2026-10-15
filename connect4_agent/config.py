@@ -51,3 +51,8 @@ HOTKEY_EXIT = "esc"         # завершение работы
 CDP_PORT_RANGE = list(range(9222, 9230))
 TARGET_URL_HINT = "papergames.io"
 PLAYER_NAME = "Player"   # наш ник на сайте (по нему определяется сторона)
+
+# Ввод боевых кликов: "cdp" — через DevTools (Input.dispatchMouseEvent, доверенные
+# события; ФИЗИЧЕСКИЙ курсор не двигается, окно поднимать не нужно); "physical" —
+# старый путь pyautogui (нужен фокус окна, курсор занят).
+INPUT_MODE = "cdp"

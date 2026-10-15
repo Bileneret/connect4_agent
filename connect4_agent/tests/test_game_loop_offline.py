@@ -129,7 +129,8 @@ def test_loop_click_verify():
     session = SessionManager()
     loop = GameLoop(page=object(), engine=SolverEngine(max_gb=0.05), book=FakeBook(3),
                     session=session, mouse=mouse, read_fn=fake_read,
-                    apply_clicks=False, think_cap_s=0.1, human_rhythm=False)
+                    apply_clicks=False, think_cap_s=0.1, human_rhythm=False,
+                    input_mode="physical")   # здесь проверяем именно физический план клика
     result = loop.step()
     assert result == "clicked", result
     assert loop.stats["clicks"] == 2 and loop.stats["retries"] == 1, loop.stats

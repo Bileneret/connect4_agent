@@ -62,7 +62,7 @@ def selftest():
 
 def live(auto=True):
     """Живой автопилот: CDP-подключение, книга, движок, физическая мышь (Этапы 5-7)."""
-    from config import TARGET_URL_HINT
+    from config import INPUT_MODE, TARGET_URL_HINT
     from browser.cdp_connector import connect_tab, find_debug_ports, list_tabs
     from engine.opening_book import OpeningBook
     from engine.ponder import PonderManager
@@ -104,6 +104,9 @@ def live(auto=True):
         return 1
     print(f"[run] локфайл захвачен ({LOCK_PATH.name}, порт {browser_port}) — P1.3: "
           "параллельные CDP-инструменты откажутся вмешиваться без --force")
+    print(f"[run] ввод боевых кликов: {INPUT_MODE}"
+          + (" — курсор ОС не двигается, окно поднимать не нужно"
+             if INPUT_MODE == "cdp" else " (физическая мышь pyautogui)"))
 
     dispatcher = None
     try:

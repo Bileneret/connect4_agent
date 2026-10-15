@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config import ANIMATION_SETTLE_MS, CLICK_MAX_RETRIES, CLICK_VERIFY_MS  # noqa: E402
+from config import ANIMATION_SETTLE_MS, CLICK_MAX_RETRIES, CLICK_VERIFY_MS, INPUT_MODE  # noqa: E402
 from engine.bitboard import (  # noqa: E402
     COLUMN_MASK, column_heights, compute_winning_position, grid_ownership_ok,
     possible_moves, possible_non_losing_moves, popcount64,
@@ -171,7 +171,7 @@ class GameLoop:
     def __init__(self, page, engine, book, session, mouse,
                  read_fn=None, apply_clicks=True, mode="auto", log=print,
                  think_cap_s=20.0, ponder=None, human_rhythm=True,
-                 browser_port=None):
+                 browser_port=None, input_mode=None):
         if read_fn is None:
             from browser.dom_reader import read_papergames
             read_fn = read_papergames
@@ -183,6 +183,7 @@ class GameLoop:
         self.mouse = mouse
         self.read_fn = read_fn
         self.apply_clicks = apply_clicks
+        self.input_mode = input_mode or INPUT_MODE   # "cdp" | "physical"
         self.mode = mode            # "auto" | "hint"
         self.paused = False
         self.running = True
@@ -402,27 +403,40 @@ class GameLoop:
                 # кликать нельзя: под курсором экран «Play again!/Leave room»
                 self.log("[loop] доска исчезла до клика (матч завершён) — не кликаю")
                 return False
-            if fresh is not None:
-                cx = (fresh["screen_x"] + fresh["cx"]) * fresh["dpr"]
-                cy = (fresh["screen_y"] + fresh["chrome_top"] + fresh["cy"]) * fresh["dpr"]
-                radius_phys = fresh["radius"] * fresh["dpr"]
-            else:
-                cx, cy = snap.col_center_screen_px(col)
-            if self.apply_clicks and not self._ensure_click_target(cx, cy):
-                self.log("[loop] окно браузера не поднимается наверх — пауза")
-                self.paused = True
-                return False
             if attempt:
                 self.stats["retries"] += 1
                 self.log(f"[loop] повторный клик (попытка {attempt + 1})")
-            plan = self.mouse.plan_column_click((cx, cy), radius_phys)
-            try:
-                self.mouse.click(plan, apply=self.apply_clicks)
-            except Exception as exc:  # noqa: BLE001 — FailSafe/ошибки ввода
-                self.paused = True
-                self.log(f"[loop] FAILSAFE/ошибка мыши: {exc} — пауза")
-                return False
-            self.stats["clicks"] += 1
+            if self.input_mode == "cdp":
+                # CDP-ввод: курсор ОС и окно НЕ трогаем вовсе (Q38 не нужен)
+                if fresh is not None:
+                    ccx, ccy, crad = fresh["cx"], fresh["cy"], fresh["radius"]
+                else:
+                    cc = snap.col_centers_client[col] or (0.0, 0.0)
+                    ccx, ccy = float(cc[0]), float(cc[1])
+                    crad = max(10.0, snap.board_rect["w"] / 7 / 2)
+                if self.apply_clicks:
+                    from browser.cdp_input import human_click
+                    human_click(self.page, ccx, ccy, radius=crad)
+                self.stats["clicks"] += 1
+            else:
+                if fresh is not None:
+                    cx = (fresh["screen_x"] + fresh["cx"]) * fresh["dpr"]
+                    cy = (fresh["screen_y"] + fresh["chrome_top"] + fresh["cy"]) * fresh["dpr"]
+                    radius_phys = fresh["radius"] * fresh["dpr"]
+                else:
+                    cx, cy = snap.col_center_screen_px(col)
+                if self.apply_clicks and not self._ensure_click_target(cx, cy):
+                    self.log("[loop] окно браузера не поднимается наверх — пауза")
+                    self.paused = True
+                    return False
+                plan = self.mouse.plan_column_click((cx, cy), radius_phys)
+                try:
+                    self.mouse.click(plan, apply=self.apply_clicks)
+                except Exception as exc:  # noqa: BLE001 — FailSafe/ошибки ввода
+                    self.paused = True
+                    self.log(f"[loop] FAILSAFE/ошибка мыши: {exc} — пауза")
+                    return False
+                self.stats["clicks"] += 1
             time.sleep(waits[min(attempt, len(waits) - 1)])
             snap2 = self.read_fn(self.page)
             # верификация по числу НАШИХ фишек (устойчиво к одновременным ходам
