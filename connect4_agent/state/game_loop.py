@@ -112,6 +112,12 @@ def decide_move(engine, book, position, mask, moves, deadline_ts,
         time.sleep(0.05)
     if "r" in box:
         return Decision("exact", box["r"][0])
+    # 3б) частичная книга: максимум среди ТОЧНЫХ известных детей
+    if book is not None and getattr(book, "available", False):
+        known = book.known_children(position, mask, moves)
+        if known:
+            col = max(known, key=lambda t: (t[1], -abs(t[0] - MID_COL)))[0]
+            return Decision("book_partial", int(col))
     # 4) экстренный ход — не зависаем
     return Decision("emergency", choose_emergency(position, mask, moves))
 

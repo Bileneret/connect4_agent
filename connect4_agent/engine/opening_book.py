@@ -175,6 +175,27 @@ class OpeningBook:
             return int(self.scores[idx])
         return None
 
+    def known_children(self, position, mask, moves=0):
+        """Оценки детей, присутствующих в книге: [(col, value с точки зрения ходящего)].
+
+        Используется как «частичная» политика: когда не все дети в книге, но
+        часть есть — выбирать максимум среди ТОЧНЫХ известных значений (лучше
+        грубой эвристики экстренного хода).
+        """
+        if not self.available or moves < 0:
+            return []
+        possible = int(((int(mask) + int(BOTTOM_MASK)) & int(BOARD_MASK)) & ~int(mask))
+        out = []
+        while possible:
+            b = possible & -possible
+            possible ^= b
+            col = (b.bit_length() - 1) // 7
+            cpos, cmask = play_bit(np.uint64(position), np.uint64(mask), np.uint64(b))
+            child = self.get(cpos, cmask, moves + 1)
+            if child is not None:
+                out.append((col, -child))
+        return out
+
     def best_move(self, position, mask, moves=0):
         """Лучший ход по оценкам детей из книги; None — отдать солверу.
 
