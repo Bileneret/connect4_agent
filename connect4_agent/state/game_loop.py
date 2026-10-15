@@ -33,8 +33,8 @@ if str(ROOT) not in sys.path:
 
 from config import ANIMATION_SETTLE_MS, CLICK_MAX_RETRIES, CLICK_VERIFY_MS  # noqa: E402
 from engine.bitboard import (  # noqa: E402
-    COLUMN_MASK, column_heights, compute_winning_position, possible_moves,
-    possible_non_losing_moves, popcount64,
+    COLUMN_MASK, column_heights, compute_winning_position, grid_ownership_ok,
+    possible_moves, possible_non_losing_moves, popcount64,
 )
 
 H1 = 7
@@ -270,6 +270,14 @@ class GameLoop:
                      f"eng={column_heights(mask)} -> ресинк из DOM")
             self._dump_incident("desync_heights",
                                 {"dom": snap.heights, "eng": column_heights(mask)})
+            return "resync"
+
+        # инвариант владения: число камней сторон привязано к чётности хода;
+        # транзиентный мисрид (фишка в анимации падения) ловится здесь и уходит
+        # на повторное чтение — иначе бот решает по зеркальной позиции
+        if not grid_ownership_ok(snap.grid, snap.my_turn):
+            self.log(f"[loop] несоответствие владельцев камней (moves={snap.moves}, "
+                     f"наш ход={snap.my_turn}) — повторное чтение")
             return "resync"
 
         deadline = self.session.think_deadline() or (time.time() + self.think_cap_s)

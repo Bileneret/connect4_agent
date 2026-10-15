@@ -180,3 +180,27 @@ def column_heights(mask):
     """Число фишек в каждой колонке (для сверки с DOM, Вопрос №40)."""
     m = int(mask)
     return [ (m & int(COLUMN_MASK[c])).bit_count() for c in range(WIDTH) ]
+
+
+def grid_ownership_ok(grid, my_turn: bool) -> bool:
+    """Инвариант владения: число камней сторон привязано к чётности хода.
+
+    Легальны только |ours - theirs| <= 1 и перевес на стороне того, чья очередь
+    ходить НЕ сейчас (тот только что сходил). Ловит транзиентные мисриды чтения —
+    например, фишку соперника, пойманную в кадре анимации падения и на мгновение
+    классифицированную как нашу (иначе бот решает по зеркальной позиции).
+    """
+    ours = theirs = 0
+    for row in grid:
+        for v in row:
+            if v == 1:
+                ours += 1
+            elif v == 2:
+                theirs += 1
+    if abs(ours - theirs) > 1:
+        return False
+    if my_turn:
+        # наш ход: либо поровну (мы начинали), либо у соперника на один больше
+        return ours == theirs or theirs == ours + 1
+    # их ход: либо поровну, либо у нас на один больше
+    return ours == theirs or ours == theirs + 1
