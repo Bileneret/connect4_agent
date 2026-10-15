@@ -2,12 +2,16 @@
 клик-верификация с фейковой страницей (физическая мышь НЕ используется).
 """
 
+import os
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# P2.9: дампы инцидентов этого теста — в отдельную папку, не в logs/incidents
+os.environ.setdefault("C4_INCIDENTS_DIR", str(ROOT / "logs" / "incidents_test"))
 
 from browser.dom_reader import BoardSnapshot  # noqa: E402
 from engine.bitboard import load_position  # noqa: E402

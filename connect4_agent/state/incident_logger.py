@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -20,7 +21,13 @@ DEFAULT_BASE = ROOT / "logs" / "incidents"
 
 
 def dump_incident(kind: str, payload: dict, page=None, base_dir: Path | None = None) -> Path:
-    """Сохранить дамп инцидента и вернуть путь к папке дампа."""
+    """Сохранить дамп инцидента и вернуть путь к папке дампа.
+
+    base_dir (или переменная окружения C4_INCIDENTS_DIR) позволяет уводить
+    дампы офлайн-тестов в отдельную папку, не засоряя logs/incidents (P2.9).
+    """
+    if base_dir is None:
+        base_dir = os.environ.get("C4_INCIDENTS_DIR")
     base = Path(base_dir) if base_dir else DEFAULT_BASE
     stamp = time.strftime("%Y%m%d-%H%M%S")
     folder = base / f"{stamp}-{kind}"

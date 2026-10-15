@@ -339,6 +339,14 @@ class GameLoop:
             return None
         return res if (res and "cx" in res) else None
 
+    def _board_alive(self) -> bool:
+        """Есть ли на странице доска прямо сейчас (защита от кликов в экран финала)."""
+        try:
+            return bool(self.page.evaluate(
+                "() => document.querySelectorAll('.grid-item').length"))
+        except Exception:  # noqa: BLE001 — навигация/закрытая станица = доски нет
+            return False
+
     def _clear_overlay(self):
         """Убрать оверлей вне партии (после матча/раунда)."""
         try:
@@ -381,6 +389,11 @@ class GameLoop:
             # свежие координаты: если реклама/баннер сдвинули вёрстку после снимка —
             # кликаем по фактическому положению клетки в момент клика
             fresh = self._fresh_click_target(col) if self.apply_clicks else None
+            if self.apply_clicks and fresh is None and not self._board_alive():
+                # матч завершился между решением и кликом (соперник вышел/финал) —
+                # кликать нельзя: под курсором экран «Play again!/Leave room»
+                self.log("[loop] доска исчезла до клика (матч завершён) — не кликаю")
+                return False
             if fresh is not None:
                 cx = (fresh["screen_x"] + fresh["cx"]) * fresh["dpr"]
                 cy = (fresh["screen_y"] + fresh["chrome_top"] + fresh["cy"]) * fresh["dpr"]
