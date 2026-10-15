@@ -7,6 +7,7 @@ CDP-кликами (симулирует живого соперника) и к�
 Запуск: python tools/opponent_bot.py [port] [--secret 692]
 """
 
+import os
 import random
 import sys
 import time
@@ -17,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from browser.cdp_connector import connect_tab, list_tabs  # noqa: E402
 
-FRIEND_NAME = "PlayerFriend"   # ник друга: по нему определяется сторона
+FRIEND_NAME = os.environ.get("C4_FRIEND_NAME", "PlayerFriend")   # ник «друга»: по нему сторона
 
 READY_JS = r"""
 (cfg) => {
