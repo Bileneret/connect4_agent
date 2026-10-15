@@ -25,6 +25,10 @@ def main():
     conn = connect_tab(target)
     try:
         page = conn.page
+        # возврат на страницу игры (могли остаться в History/Shop и т.п.)
+        if "connect4" not in page.url:
+            page.goto("https://papergames.io/en/connect4", timeout=20000)
+            time.sleep(2.5)
         if page.evaluate("() => document.querySelectorAll('.grid-item').length"):
             print("доска уже на экране — игра идёт")
             return 0
