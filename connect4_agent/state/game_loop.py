@@ -140,16 +140,44 @@ class GameLoop:
         self.last_opponent_move_ts = 0.0
         self.failures = 0
         self.browser_hwnd = None
+        self.last_continue_ts = 0.0
         self.stats = {"book": 0, "tactical_win": 0, "tactical_block": 0,
                       "exact": 0, "emergency": 0, "clicks": 0, "retries": 0}
 
     # --- один тик -----------------------------------------------------------
+    _CONTINUE_JS = r"""
+    () => {
+      const inRoom = /\/r\//.test(location.href);
+      const rx = /^(continue|продолжить)$/i;
+      const btn = Array.from(document.querySelectorAll('button'))
+          .find(b => b.getBoundingClientRect().width > 0 && rx.test((b.textContent || '').trim()));
+      if (!btn) return {clicked: false, inRoom};
+      btn.click();
+      return {clicked: true, inRoom, text: (btn.textContent || '').trim()};
+    }
+    """
+
+    def _maybe_continue_round(self):
+        """Q10: авто-продолжение серии раундов; после МАТЧА (лобби) — ничего не жмём (Q12)."""
+        if time.time() - self.last_continue_ts < 3.0:
+            return
+        try:
+            res = self.page.evaluate(self._CONTINUE_JS)
+        except Exception:  # noqa: BLE001 — модал может исчезнуть между чтением и кликом
+            return
+        if res.get("clicked"):
+            self.last_continue_ts = time.time()
+            self.log(f"[loop] раунд-модал: нажал «{res.get('text')}» "
+                     f"(в комнате: {res.get('inRoom')}) — продолжаем серию")
+
     def step(self) -> str | None:
         snap = self.read_fn(self.page)
         if snap is None or not snap.grid:
             if self.session.st.board_present and self.session.st.moves > 0:
                 self.session.update(None, now=time.time())  # GAME_OVER
                 self.persist()
+                self.log("[loop] раунд/матч завершён — проверяю модал продолжения")
+            self._maybe_continue_round()
             return None
         events = self.session.update(snap)
         for e in events:
@@ -223,6 +251,7 @@ class GameLoop:
     def _click_and_verify(self, col: int, snap) -> bool:
         radius_phys = (snap.board_rect["w"] / 7 / 2) * snap.dpr
         waits = (CLICK_VERIFY_MS / 1000.0, 1.2, 1.2)  # анимация фишки дорисуется не сразу
+        t_start = time.time()
         for attempt in range(1 + CLICK_MAX_RETRIES):
             cx, cy = snap.col_center_screen_px(col)
             if self.apply_clicks and not self._ensure_click_target(cx, cy):
@@ -244,8 +273,11 @@ class GameLoop:
             snap2 = self.read_fn(self.page)
             if snap2 and snap2.grid and (snap2.moves == snap.moves + 1
                                          or not snap2.my_turn):
+                self.log(f"[loop] клик подтверждён за {time.time() - t_start:.1f} с "
+                         f"(попытка {attempt + 1})")
                 return True
-        self.log("[loop] клик не подтверждён после повторов")
+        self.log(f"[loop] клик не подтверждён после повторов "
+                 f"({time.time() - t_start:.1f} с)")
         return False
 
     def persist(self):
