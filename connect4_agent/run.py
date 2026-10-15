@@ -7,6 +7,7 @@
 import argparse
 import ctypes
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[0]
@@ -133,10 +134,19 @@ def live(auto=True):
         def _request_resync():
             print("[run] F9: ресинк (логика в цикле)")
 
+        _esc_seen: list[float] = []   # глобальный хук ловит Esc в ЛЮБОЙ программе —
+                                      # одиночное нажатие не должно убивать партию
+
         def _request_exit():
-            # P1.5: различимая строка — источник остановки (F8 остаётся паузой)
-            print("[run] остановка: хоткей Esc (F8 — пауза, а не выход)")
-            loop.running = False
+            # P1.5: различимая строка — источник остановки; выход по ДВОЙНОМУ Esc
+            now = time.time()
+            if _esc_seen and now - _esc_seen[-1] <= 2.0:
+                print("[run] остановка: двойной Esc (F8 — пауза, а не выход)")
+                loop.running = False
+            else:
+                _esc_seen.append(now)
+                print("[run] Esc: для выхода нажмите Esc ещё раз в течение 2 с "
+                      "(F8 — пауза)")
 
         dispatcher.bind("toggle_mode", _toggle_mode)
         dispatcher.bind("pause", _toggle_pause)
