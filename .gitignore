@@ -9,22 +9,21 @@ __pycache__/
 logs/
 incidents/
 
-# Служебное
+# Служебное (паттерны без имени пакета — переживают переименование)
 Thumbs.db
 desktop.ini
 *.book
 _cdp_test_profile/
 .zcode/
-connect4_agent/browser_profile/
-connect4_agent/tests/fixtures/*.png
-connect4_agent/browser_profile*/
+browser_profile*/
+tests/fixtures/*.png
 
 # Не публикуется (локальные данные и внутренние документы):
 #  - книга Понса: данные под AGPL-3.0, в MIT-репозиторий не входит (см. README)
 #  - import_pons_book.py: производная (литеральный порт key3 из его кода)
 #  - FIX_PLAN.md и тех-план: внутренние документы проекта
-connect4_agent/books/*.npz
-connect4_agent/tests/import_pons_book.py
-connect4_agent/FIX_PLAN.md
+books/*.npz
+tests/import_pons_book.py
+FIX_PLAN.md
 connect4_papergames_implementation_plan.md
 connect4_papergames_implementation_plan.pdf
