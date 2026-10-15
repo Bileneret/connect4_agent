@@ -31,13 +31,13 @@ _MAX_MOVES = TOTAL_CELLS  # 42 — число строк scratch-буфера с
 @njit(
     types.int64(
         uint64, uint64, types.int64, types.int64, types.int64,
-        uint64[::1], types.int8[::1], types.uint8[::1], types.uint8[::1],
+        types.uint64[::1], types.uint64[::1],
         uint64, types.int64[:, ::1], types.int8[:, ::1], types.int64[::1],
     ),
     cache=True, nogil=True,
 )
 def _negamax(position, mask, moves, alpha, beta,
-             keys, scores, metas, depths, pairs, sc_row, col_row, nodes):
+             entry, check, pairs, sc_row, col_row, nodes):
     nodes[0] += 1
 
     # невозможность не проиграть ходом => соперник значит выигрывает следующим
@@ -62,7 +62,7 @@ def _negamax(position, mask, moves, alpha, beta,
             return beta
 
     key = position + mask
-    found, tscore, tbound, tcol = tt_lookup(keys, scores, metas, depths, pairs, key)
+    found, tscore, tbound, tcol = tt_lookup(entry, check, pairs, key)
     if found:
         if tbound == BOUND_UPPER:
             if beta > tscore:
@@ -102,23 +102,23 @@ def _negamax(position, mask, moves, alpha, beta,
         m_next = moves + 1
         if first:
             s = -_negamax(cpos, cmask, m_next, -beta, -alpha,
-                          keys, scores, metas, depths, pairs, sc_row, col_row, nodes)
+                          entry, check, pairs, sc_row, col_row, nodes)
             first = False
         else:
             s = -_negamax(cpos, cmask, m_next, -alpha - 1, -alpha,
-                          keys, scores, metas, depths, pairs, sc_row, col_row, nodes)
+                          entry, check, pairs, sc_row, col_row, nodes)
             if s > alpha:  # пробив нулевого окна — переискать с полным
                 s = -_negamax(cpos, cmask, m_next, -beta, -alpha,
-                              keys, scores, metas, depths, pairs, sc_row, col_row, nodes)
+                              entry, check, pairs, sc_row, col_row, nodes)
         if s >= beta:
-            tt_store(keys, scores, metas, depths, pairs, key, s, BOUND_LOWER, col,
+            tt_store(entry, check, pairs, key, s, BOUND_LOWER, col,
                      TOTAL_CELLS - moves)
             return s
         if s > alpha:
             alpha = s
             best_col = col
 
-    tt_store(keys, scores, metas, depths, pairs, key, alpha, BOUND_UPPER, best_col,
+    tt_store(entry, check, pairs, key, alpha, BOUND_UPPER, best_col,
              TOTAL_CELLS - moves)
     return alpha
 
@@ -126,13 +126,13 @@ def _negamax(position, mask, moves, alpha, beta,
 @njit(
     types.int64(
         uint64, uint64, types.int64,
-        uint64[::1], types.int8[::1], types.uint8[::1], types.uint8[::1],
+        types.uint64[::1], types.uint64[::1],
         uint64, types.int64[:, ::1], types.int8[:, ::1], types.int64[::1],
     ),
     cache=True, nogil=True,
 )
 def _solve_root(position, mask, moves,
-                keys, scores, metas, depths, pairs, sc_row, col_row, nodes):
+                entry, check, pairs, sc_row, col_row, nodes):
     if can_win_next(position, mask):
         return (TOTAL_CELLS + 1 - moves) // 2
 
@@ -152,7 +152,7 @@ def _solve_root(position, mask, moves,
             if half > med:
                 med = half
         r = _negamax(position, mask, moves, med, med + 1,
-                     keys, scores, metas, depths, pairs, sc_row, col_row, nodes)
+                     entry, check, pairs, sc_row, col_row, nodes)
         if r <= med:
             hi = r
         else:
@@ -179,11 +179,12 @@ class SolverEngine:
         return self.tt["bytes"]
 
     def tt_fill(self):
-        depths = self.tt["depths"]
-        return int(np.count_nonzero(depths)), depths.shape[0]
+        check = self.tt["check"]
+        return int(np.count_nonzero(check)), check.shape[0]
 
     def reset_tt(self):
-        self.tt["depths"].fill(0)
+        self.tt["entry"].fill(0)
+        self.tt["check"].fill(0)
 
     # --- публичный API ------------------------------------------------------
     def load_sequence(self, seq: str):
@@ -193,8 +194,7 @@ class SolverEngine:
     def solve(self, position, mask, moves=0) -> int:
         """Точная оценка позиции с точки зрения ходящего игрока."""
         return int(_solve_root(position, mask, moves,
-                               self.tt["keys"], self.tt["scores"], self.tt["metas"],
-                               self.tt["depths"], self.tt["pairs"],
+                               self.tt["entry"], self.tt["check"], self.tt["pairs"],
                                self._sc_row, self._col_row, self._nodes))
 
     def solve_sequence(self, seq: str) -> int:
