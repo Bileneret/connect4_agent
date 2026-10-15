@@ -1,6 +1,11 @@
 # connect4_agent
 
-[Русская версия](README.ru.md) · MIT · Python 3.12 + Numba
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Engine gate](https://img.shields.io/badge/engine_gate-6%2F6_sets_100%25-brightgreen.svg)](#key-metrics)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#quick-start-offline)
+
+[Русская версия](README.ru.md)
 
 **An exact-play Connect 4 engine with a multi-threaded search core and a live vision/CDP benchmark harness.**
 
@@ -40,18 +45,45 @@ Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overl
 | Vision fallback | **42/42 cells** vs DOM, at 125% and 100% display scale |
 | Live series vs the site's strongest bot | 20 games: **11 W / 7 L / 2 D**; **3/3 as first player** |
 
+## Before / after (measured on the live bench)
+
+| Stage | First working version | Hardened version | Measured effect |
+|---|---|---|---|
+| Click delivery | stepwise cursor animation, ~30 CDP round-trips | one mouse flight + one atomic `click(delay)` | **17–22 s → 0.6–0.8 s** per click under CPU load |
+| Move ordering | one scratch buffer shared by all search threads | per-thread scratch + invalid-move guard | phantom children gone; exact scores restored (replay-proven) |
+| Click verification | global stone counter (racy vs a simultaneous opponent move) | count of *our* stones + turn hand-off | no false retries, no duplicate placements |
+| Site timing traps | strict ±0 ownership invariant | tolerance `abs(balance) ≤ 1` + 6 s phantom-move watchdog | dead forfeits eliminated (was 150+ false triggers per game) |
+| Board vision | single color threshold on the plate | 35%-of-max profile threshold + aspect repair | **42/42 cells** at 100% and 125% display scale |
+
 ## Architecture
 
-```
- DOM reader ─┐
-             ├─► state validation (column heights + stone-balance invariants)
- Vision(mss)─┘            │
-                          ├─► decision cascade:
-                          │     book (optional, external)  →  tactical win/block
-                          │     →  exact solve (bisection over shared TT)
-                          │     →  partial-book / emergency fallbacks
-                          └─► input actuator:  CDP trusted events (default)
-                                               physical mouse fallback (pyautogui + window guard)
+```mermaid
+flowchart LR
+    subgraph SITE["PaperGames.io (live)"]
+        UI["Board and HUD"]
+    end
+
+    subgraph HOST["connect4_agent pipeline"]
+        DOM["DOM reader<br/>cell snapshot + ownership"]
+        VIS["Vision fallback<br/>plate detect + grid read (mss)"]
+        VAL["State validation<br/>column heights + stone balance"]
+        LOOP["game_loop<br/>move budget, deadlines, guards"]
+        BOOK["Opening book<br/>optional, not shipped"]
+        SOL["Exact solver<br/>Numba Negamax + PVS, lockless TT"]
+        POND["Ponder workers<br/>BELOW_NORMAL, generation-guarded"]
+        CDP["CDP input actuator<br/>trusted events, no OS cursor"]
+    end
+
+    UI -->|visible DOM| DOM
+    UI -.->|screen fallback| VIS
+    DOM --> VAL
+    VIS --> VAL
+    VAL --> LOOP
+    LOOP --> BOOK
+    LOOP --> SOL
+    POND -.-> SOL
+    LOOP -->|column choice| CDP
+    CDP -->|trusted click, 0.6-0.8 s| UI
 ```
 
 Repository layout:
@@ -69,21 +101,27 @@ connect4_agent/
 
 ## Engineering highlights
 
-- **Lockless TT**: each slot is one packed 64-bit entry (`score | bound | move | depth`) plus a
-  check word `key ^ entry`; a torn (racy) read can only ever verify for the same key. All ponder
-  threads share the table with no locks.
-- **Per-thread move-ordering scratch**: found in live play — two threads writing the same scratch
-  row at equal depth injected foreign moves (including full columns) and produced phantom children
-  with corrupted scores. Fixed with per-thread buffers and an invalid-move guard
-  (`engine.invalid_moves` is 0 in a healthy run).
-- **Generation-guarded ponder workers** at `BELOW_NORMAL` OS priority: they yield CPU to the
-  input path, which dropped CDP click latency from 2.0–2.5 s to 0.6–0.8 s.
-- **Reader hardening against a live UI**: invisible nickname duplicates, per-side disc colors,
-  CSS-class-based ownership, drop animations, hover placeholders, ad-driven layout shifts.
-- **Clock discipline**: per-move deadline plus a total-bank share
-  `(bank − margin) / remaining own moves`.
+Four cases from the live bench — full write-ups in
+[docs/ENGINEERING_LOG.md](connect4_agent/docs/ENGINEERING_LOG.md):
 
-Full post-mortems: [docs/ENGINEERING_LOG.md](connect4_agent/docs/ENGINEERING_LOG.md).
+- **The buffer race that moved pieces on its own.** Ponder workers and the main search shared the
+  same move-ordering scratch rows; at equal depth a foreign move (up to a full column) leaked into
+  a node and produced phantom children with corrupted scores. Caught by replaying a lost game with
+  the reference book as an oracle (the engine played column 2 into a draw while column 6 wins at
+  +1). Fixed with per-thread scratch, an invalid-move guard (`engine.invalid_moves` is 0 in a
+  healthy run) and generation-tagged workers.
+- **A lockless table you can prove safe.** One packed 64-bit word per entry (score, bound, move,
+  depth) plus `check = key ^ entry`; the verification `check ^ d == key` stays exact even under
+  torn reads, because the packed payload is far smaller than the table's bucket stride. All search
+  threads share the table without locks.
+- **The 22-second click.** Driving the cursor in many small CDP steps collapsed under CPU load:
+  17–22 s per click and timeouts. One mouse flight + one atomic `click(delay)` — plus
+  `BELOW_NORMAL` priority for ponder threads, so they yield CPU to the input path — brought it to
+  a measured **0.6–0.8 s** per click, with the OS cursor never moving.
+- **Reading a hostile board.** Invisible nickname clones, per-side disc colors, CSS-class
+  ownership, hover placeholders, ad-driven layout shifts and a ~1 s marker lag each broke a naive
+  reader in live play. The reader now works on visible geometry and classes, and the ownership
+  check tolerates `abs(balance) ≤ 1` with a phantom-move watchdog.
 
 ## Quick start (offline)
 
@@ -95,6 +133,18 @@ py -3 -m venv .venv
 ```
 
 All `*_offline` suites are self-contained (mocked page, no browser, no network).
+
+### Configuration
+
+Every setting is an optional environment variable — the project reads the process environment
+directly, nothing is auto-loaded. [`.env.example`](.env.example) documents the full set:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `C4_PLAYER_NAME` | `Player` | nickname of our account; the reader uses it to pick the side |
+| `C4_FRIEND_NAME` | `PlayerFriend` | nickname used by `tools/opponent_bot.py` for robot matches |
+| `C4_INCIDENTS_DIR` | `logs/incidents` | where incident dumps are written |
+| `C4_TOAST` | bundled toast script | helper invoked between series runs by `tools/acceptance_series.py` |
 
 ## Live harness (optional)
 
