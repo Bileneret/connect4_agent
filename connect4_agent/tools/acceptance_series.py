@@ -21,8 +21,9 @@ sys.path.insert(0, str(ROOT / "tools"))
 from browser.cdp_connector import connect_tab, find_debug_ports, list_tabs  # noqa: E402
 
 TOAST = str(Path.home() / ".zcode/skills/windows-push-notification/scripts/send-toast.sh")
-HISTORY_RE = re.compile(
-    r"Player[^\d]*\(\d+\)[^\d]*(\d)\s*Sofia[^\d]*\(\d+\)[^\d]*(\d)", re.S)
+HISTORY_RE = re.compile(r"\(\d+\)(\d)(\d)\s*Connect\s*4", re.S)
+# Живой формат строки (проверено 16.10): "Player (1500)Sofia (2669)10 Connect 4 <дата>"
+# где "10" = наш счёт 1, счёт соперника 0 (победа); "01" = поражение.
 DATE_RE = re.compile(r"(Oct|Nov|Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep)\s+\d+,\s+\d{4},\s+[\d:]+\s+[AP]M")
 
 
