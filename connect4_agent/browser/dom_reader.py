@@ -60,16 +60,17 @@ PAPERGAMES_OPP_RGB = (238, 102, 119)    # цвет соперника (живо�
 
 _PAPERGAMES_READ_JS = r"""
 (cfg) => {
-  const myRgb = cfg.my, oppRgb = cfg.opp;   // ВАЖНО: dict-аргумент — Playwright
-                                            // иначе передаёт список как один параметр
+  let myRgb = cfg.my, oppRgb = cfg.opp;   // dict-аргумент: Playwright иначе
+                                          // передал бы список одним параметром
   const rect = el => { const r = el.getBoundingClientRect();
     return {x: r.x, y: r.y, w: r.width, h: r.height}; };
-  const parseColor = s => { const m = (s || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  const parseColor = s => { const m = (s || '').match(/rgba?\(\d+\),\s*(\d+),\s*(\d+)/);
     return m ? [+m[1], +m[2], +m[3]] : null; };
   const dist = (a, b) => a && b ? Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]) : 1e9;
 
   const out = {errors: [], grid: [], heights: [], col_centers: [], board_rect: null,
-               moves: 0, my_turn: false, timers: {}, dpr: window.devicePixelRatio || 1,
+               moves: 0, my_turn: false, my_side: "left", timers: {},
+               dpr: window.devicePixelRatio || 1,
                screen_x: window.screenX, screen_y: window.screenY,
                chrome_top: Math.max(0, window.outerHeight - window.innerHeight),
                covered: []};
@@ -79,19 +80,64 @@ _PAPERGAMES_READ_JS = r"""
   if (!board || !cells.length) { out.errors.push('board/cells not found'); return out; }
   out.board_rect = rect(board);
 
-  // размеры из класса size6x7 (CxR), иначе из координат
   let W = 7, H = 6;
   const mSize = String(board.className).match(/size(\d+)x(\d+)/);
   if (mSize) { H = +mSize[1]; W = +mSize[2]; }
   out.grid = Array.from({length: H}, () => new Array(W).fill(0));
 
-  const colCells = new Map();  // colIndex -> [cells]
+  // СТОРОНА по нашему нику (в матчмейкинге мы бываем и справа), хронометры
+  // сортируем по x; наш ход — активен хронометр НАШЕЙ стороны
+  let mySide = "left";
+  const nameEl = Array.from(document.querySelectorAll('*')).find(e =>
+      e.children.length === 0 && (e.textContent || '').trim() === cfg.my_name
+      && e.getBoundingClientRect().top < 140);
+  if (nameEl) {
+    mySide = nameEl.getBoundingClientRect().left < window.innerWidth / 2 ? "left" : "right";
+  }
+  out.my_side = mySide;
+  const chronos = Array.from(document.querySelectorAll('.chronometer'))
+      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  out.timers = {};
+  if (chronos[0]) out.timers.left = chronos[0].textContent.trim();
+  if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
+  const ourChrono = chronos[mySide === "left" ? 0 : 1];
+  const theirChrono = chronos[mySide === "left" ? 1 : 0];
+  if (ourChrono) out.my_turn = ourChrono.classList.contains('bg-secondary');
+
+  // цвета-индикаторы: насыщенные кружки-точки рядом с хронометрами
+  const dots = [];
+  for (const e of document.querySelectorAll('*')) {
+    const r = e.getBoundingClientRect();
+    if (r.top > 140 || r.width < 8 || r.width > 46 || Math.abs(r.width - r.height) > 8) continue;
+    const c = parseColor(getComputedStyle(e).backgroundColor);
+    if (!c) continue;
+    if (Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) < 40) continue;
+    dots.push({c: c, x: r.x + r.width / 2, y: r.y + r.height / 2});
+  }
+  const dotNear = (chron) => {
+    if (!chron) return null;
+    const r = chron.getBoundingClientRect();
+    const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    let best = null, bd = 1e9;
+    for (const d of dots) {
+      const dd = Math.hypot(d.x - cx, (d.y - cy) * 1.5);
+      if (dd < bd) { bd = dd; best = d; }
+    }
+    return bd <= 170 ? best.c : null;
+  };
+  const ourDot = dotNear(ourChrono);
+  const theirDot = dotNear(theirChrono);
+  if (ourDot) myRgb = ourDot;
+  if (theirDot) oppRgb = theirDot;
+
+  // клетки: владелец по цвету фишки (калиброванные цвета выше)
+  const colCells = new Map();
   for (const c of cells) {
     const m = String(c.className).match(/cell-(\d+)-(\d+)/);
     if (!m) continue;
     const row1 = +m[1], col1 = +m[2];      // cell-{R}-{C}: R 1..6 сверху, C 1..7 слева
     const col = col1 - 1;
-    const rowBottom0 = H - row1;           // наша сетка: row 0 = низ
+    const rowBottom0 = H - row1;
     const circles = Array.from(c.querySelectorAll('circle'));
     const pieceCircle = circles.find(k => !k.classList.contains('empty-slot'));
     if (pieceCircle) {
@@ -99,7 +145,8 @@ _PAPERGAMES_READ_JS = r"""
                    parseColor(pieceCircle.getAttribute('fill'));
       if (dist(fill, myRgb) <= 120) out.grid[rowBottom0][col] = 1;
       else if (dist(fill, oppRgb) <= 120) out.grid[rowBottom0][col] = 2;
-      else out.errors.push('unknown disc color ' + JSON.stringify(fill));
+      else out.errors.push('unknown disc color ' + JSON.stringify(fill) +
+                           ' my=' + JSON.stringify(myRgb) + ' opp=' + JSON.stringify(oppRgb));
     }
     if (!colCells.has(col)) colCells.set(col, []);
     colCells.get(col).push(c);
@@ -112,16 +159,7 @@ _PAPERGAMES_READ_JS = r"""
     out.heights.push(h);
   }
 
-  // хронометры: первый — наш (левая шапка), активный = с классом bg-secondary
-  const chronos = Array.from(document.querySelectorAll('.chronometer'));
-  out.timers = {};
-  if (chronos[0]) {
-    out.timers.left = chronos[0].textContent.trim();
-    out.my_turn = chronos[0].classList.contains('bg-secondary');
-  }
-  if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
-
-  // центры нижних ячеек колонок + перекрытие
+  // центры нижних ячеек колонок + проверка перекрытия
   for (let c = 0; c < W; c++) {
     const list = colCells.get(c) || [];
     if (!list.length) { out.col_centers.push(null); out.covered.push(true); continue; }
@@ -139,8 +177,11 @@ _PAPERGAMES_READ_JS = r"""
 
 def read_papergames(page) -> BoardSnapshot:
     """Снимок живой доски papergames.io (селекторы разведаны 16.10.2026)."""
+    from config import PLAYER_NAME
+
     data = page.evaluate(_PAPERGAMES_READ_JS,
-                         {"my": list(PAPERGAMES_MY_RGB), "opp": list(PAPERGAMES_OPP_RGB)})
+                         {"my": list(PAPERGAMES_MY_RGB), "opp": list(PAPERGAMES_OPP_RGB),
+                          "my_name": PLAYER_NAME})
     return BoardSnapshot(
         grid=data["grid"],
         heights=data["heights"],
@@ -231,6 +272,50 @@ _READ_JS = r"""
     const el = document.querySelector(cfg.right_panel + " .disk-sample");
     return el ? parseRgb(getComputedStyle(el).backgroundColor) : null;
   })();
+
+  // СТОРОНА определяется ПО НАШЕМУ НИКУ (в матчмейкинге мы бываем и справа!),
+  // активный ход — у хронометра на НАШЕЙ стороне (класс bg-secondary)
+  let mySide = "left";
+  const nameEl = Array.from(document.querySelectorAll('*')).find(e =>
+      e.children.length === 0 && (e.textContent || '').trim() === cfg.my_name
+      && e.getBoundingClientRect().top < 140);
+  if (nameEl) {
+    mySide = nameEl.getBoundingClientRect().left < window.innerWidth / 2 ? "left" : "right";
+  }
+  const chronos = Array.from(document.querySelectorAll('.chronometer'))
+      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  out.timers = {};
+  if (chronos[0]) out.timers.left = chronos[0].textContent.trim();
+  if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
+  const ourChrono = chronos[mySide === "left" ? 0 : 1];
+  if (ourChrono) out.my_turn = ourChrono.classList.contains('bg-secondary');
+  out.my_side = mySide;
+
+  // цвета: индикаторы-кружки рядом с хронометрами (наш — у нашего таймера)
+  const dots = [];
+  for (const e of document.querySelectorAll('*')) {
+    const r = e.getBoundingClientRect();
+    if (r.top > 140 || r.width < 8 || r.width > 46 || Math.abs(r.width - r.height) > 8) continue;
+    const c = parseColor(getComputedStyle(e).backgroundColor);
+    if (!c) continue;
+    if (Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) < 40) continue;
+    dots.push({c: c, x: r.x + r.width / 2, y: r.y + r.height / 2});
+  }
+  const dotNear = (chron) => {
+    if (!chron) return null;
+    const r = chron.getBoundingClientRect();
+    const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    let best = null, bd = 1e9;
+    for (const d of dots) {
+      const dd = Math.hypot(d.x - cx, (d.y - cy) * 1.5);
+      if (dd < bd) { bd = dd; best = d; }
+    }
+    return bd <= 170 ? best.c : null;
+  };
+  const ourDot = dotNear(ourChrono);
+  const theirDot = dotNear(chronos[mySide === "left" ? 1 : 0]);
+  if (ourDot) out.my_rgb = ourDot;
+  if (theirDot) out.opp_rgb = theirDot;
 
   const owners = new Map();
   const colorVotes = [];

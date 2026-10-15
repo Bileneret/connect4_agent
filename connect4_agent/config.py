@@ -50,3 +50,4 @@ HOTKEY_EXIT = "esc"         # завершение работы
 # --- CDP (Вопрос №1) -------------------------------------------------------
 CDP_PORT_RANGE = list(range(9222, 9230))
 TARGET_URL_HINT = "papergames.io"
+PLAYER_NAME = "Player"   # наш ник на сайте (по нему определяется сторона)
