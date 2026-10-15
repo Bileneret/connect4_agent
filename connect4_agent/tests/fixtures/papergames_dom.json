@@ -1,0 +1,71 @@
+{
+ "board": null,
+ "cell0_html": null,
+ "cell_count": 0,
+ "first9_rects": [],
+ "last_rect": null,
+ "chronos": [],
+ "headerCandidates": [
+  {
+   "tag": "APP-HEADER-NAV",
+   "cls": "",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 268,
+    "h": 64
+   }
+  },
+  {
+   "tag": "MAT-TOOLBAR",
+   "cls": "mat-toolbar gap-1 position-relative mat-toolbar-single-row",
+   "rect": {
+    "x": 0,
+    "y": 0,
+    "w": 268,
+    "h": 64
+   }
+  },
+  {
+   "tag": "SPAN",
+   "cls": "flex-grow-1",
+   "rect": {
+    "x": 16,
+    "y": 14,
+    "w": 148,
+    "h": 36
+   }
+  },
+  {
+   "tag": "APP-USER-MENU",
+   "cls": "",
+   "rect": {
+    "x": 16,
+    "y": 18,
+    "w": 148,
+    "h": 22
+   }
+  },
+  {
+   "tag": "BUTTON",
+   "cls": "mat-mdc-menu-trigger mdc-button mat-mdc-button mat-unthemed mat-mdc-button-base",
+   "rect": {
+    "x": 16,
+    "y": 14,
+    "w": 148,
+    "h": 36
+   }
+  },
+  {
+   "tag": "SPAN",
+   "cls": "mdc-button__label",
+   "rect": {
+    "x": 24,
+    "y": 14,
+    "w": 132,
+    "h": 36
+   }
+  }
+ ],
+ "selectable_count": 0
+}

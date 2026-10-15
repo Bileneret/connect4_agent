@@ -15,3 +15,5 @@ desktop.ini
 *.book
 _cdp_test_profile/
 .zcode/
+connect4_papergames_bot/browser_profile/
+connect4_papergames_bot/tests/fixtures/*.png

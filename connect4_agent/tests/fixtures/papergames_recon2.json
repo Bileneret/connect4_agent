@@ -1,0 +1,345 @@
+{
+ "robot_btn": {
+  "x": 128.7375030517578,
+  "y": 633.6000366210938
+ },
+ "select_rect": {
+  "x": 764,
+  "y": 375.20001792907715
+ },
+ "options": [
+  {
+   "text": "BattleshipFirst to sink all opponent shi",
+   "x": 769.2000274658203,
+   "y": 427.20001220703125,
+   "w": 440
+  },
+  {
+   "text": "Tic Tac ToeFirst to align three marks wi",
+   "x": 769.2000274658203,
+   "y": 491.20001220703125,
+   "w": 440
+  },
+  {
+   "text": "Connect 4First to connect four dots wins",
+   "x": 769.2000274658203,
+   "y": 555.2000122070312,
+   "w": 440
+  },
+  {
+   "text": "GomokuFirst to connect five marks wins",
+   "x": 769.2000274658203,
+   "y": 619.2000122070312,
+   "w": 440
+  },
+  {
+   "text": "ChessFirst to checkmate the opponent win",
+   "x": 769.2000274658203,
+   "y": 683.2000122070312,
+   "w": 440
+  },
+  {
+   "text": "CheckersFirst to capture all the opponen",
+   "x": 769.2000274658203,
+   "y": 747.2000122070312,
+   "w": 440
+  },
+  {
+   "text": "BackgammonFirst to bear off all fifteen ",
+   "x": 769.2000274658203,
+   "y": 811.2000122070312,
+   "w": 440
+  }
+ ],
+ "picked": {
+  "text": "Connect 4First to connect four dots wins",
+  "x": 769.2000274658203,
+  "y": 555.2000122070312,
+  "w": 440
+ },
+ "continue_btn": {
+  "x": 942.8812637329102,
+  "y": 641.9000377655029
+ },
+ "cells": 42,
+ "before": {
+  "url": "https://papergames.io/en/r/Lx_4EtCEr",
+  "n_cells": 42,
+  "board": {
+   "tag": "DIV",
+   "cls": "grid size6x7",
+   "rect": {
+    "x": 508,
+    "y": 105,
+    "w": 512,
+    "h": 439
+   }
+  },
+  "cell0_html": "<div class=\"grid-item cell-1-1 selectable ng-star-inserted\"><span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span></div>",
+  "cell_cls": "grid-item cell-1-1 selectable ng-star-inserted",
+  "filled_count": 42,
+  "filled": [
+   {
+    "rect": {
+     "x": 508,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-1 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 581,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-2 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 654,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-3 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 727,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-4 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 801,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-5 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   }
+  ],
+  "chronos": [
+   {
+    "cls": "p-1 bg-gray-200 mx-1 chronometer text-white bg-secondary",
+    "text": "04:00",
+    "bg": [
+     27,
+     141,
+     125
+    ],
+    "rect": {
+     "x": 651,
+     "y": 36,
+     "w": 40,
+     "h": 20
+    }
+   },
+   {
+    "cls": "p-1 bg-gray-200 mx-1 chronometer",
+    "text": "04:00",
+    "bg": [
+     33,
+     48,
+     64
+    ],
+    "rect": {
+     "x": 837,
+     "y": 36,
+     "w": 40,
+     "h": 20
+    }
+   }
+  ]
+ },
+ "click_target": {
+  "x": 617.5874900817871,
+  "y": 507.99999618530273
+ },
+ "after": {
+  "url": "https://papergames.io/en/r/Lx_4EtCEr",
+  "n_cells": 42,
+  "board": {
+   "tag": "DIV",
+   "cls": "grid size6x7",
+   "rect": {
+    "x": 508,
+    "y": 105,
+    "w": 512,
+    "h": 439
+   }
+  },
+  "cell0_html": "<div class=\"grid-item cell-1-1 selectable ng-star-inserted\"><span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span></div>",
+  "cell_cls": "grid-item cell-1-1 selectable ng-star-inserted",
+  "filled_count": 42,
+  "filled": [
+   {
+    "rect": {
+     "x": 508,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-1 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 581,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-2 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 654,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-3 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 727,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-4 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   {
+    "rect": {
+     "x": 801,
+     "y": 105,
+     "w": 73,
+     "h": 73
+    },
+    "cls": "grid-item cell-1-5 selectable ng-star-inserted",
+    "inner": "<span class=\"position-relative\"><svg viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"50\" class=\"empty-slot\"></circle><!----><!----></svg></span>",
+    "kid_bg": [
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   }
+  ],
+  "chronos": [
+   {
+    "cls": "p-1 bg-gray-200 mx-1 chronometer",
+    "text": "04:00",
+    "bg": [
+     33,
+     48,
+     64
+    ],
+    "rect": {
+     "x": 651,
+     "y": 36,
+     "w": 40,
+     "h": 20
+    }
+   },
+   {
+    "cls": "p-1 bg-gray-200 mx-1 chronometer text-white bg-secondary",
+    "text": "04:00",
+    "bg": [
+     24,
+     188,
+     156
+    ],
+    "rect": {
+     "x": 837,
+     "y": 36,
+     "w": 40,
+     "h": 20
+    }
+   }
+  ]
+ },
+ "abort": {
+  "x": 317.5562553405762,
+  "y": 614.0000133514404
+ }
+}

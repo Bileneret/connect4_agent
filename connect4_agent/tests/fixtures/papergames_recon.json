@@ -1,0 +1,67 @@
+{
+ "clicked_robot": true,
+ "select_opened": true,
+ "game_option": null,
+ "clicked_continue": true,
+ "nickname": "no-input",
+ "cells_after_join": 0,
+ "screen": {
+  "url": "https://papergames.io/en/connect4",
+  "board": null,
+  "cell0_html": null,
+  "cell_count": 0,
+  "cell_classes": null,
+  "first9": [],
+  "last": null,
+  "chronos": [],
+  "colorEls": {
+   "my": [
+    {
+     "tag": "FA-ICON",
+     "cls": "ng-fa-icon bg-secondary p-2 text-white",
+     "rgb": [
+      24,
+      188,
+      156
+     ],
+     "rect": {
+      "x": 1144,
+      "y": 502,
+      "w": 30,
+      "h": 40
+     }
+    },
+    {
+     "tag": "DIV",
+     "cls": "level d-flex align-items-center justify-content-center pg-shadow",
+     "rgb": [
+      24,
+      188,
+      156
+     ],
+     "rect": {
+      "x": 1141,
+      "y": 216,
+      "w": 36,
+      "h": 36
+     }
+    }
+   ],
+   "opp": []
+  },
+  "buttons": [
+   "Player 2000",
+   "Play with a friend",
+   "Play vs robot",
+   "Play online with a random player",
+   "Point booster 1 hour  9000",
+   "790",
+   "790",
+   "9990",
+   "5000",
+   "5990",
+   "990",
+   "Continue"
+  ]
+ }
+}

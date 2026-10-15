@@ -40,6 +40,122 @@ class Selectors:
 
 DEFAULT_SELECTORS = Selectors()
 
+# --- живой профиль papergames.io (разведка 16.10.2026) ---------------------
+# Доска: div.grid.size6x7; клетки: .grid-item.cell-{R}-{C} где R — ряд
+# 1..6 СВЕРХУ ВНИЗ, C — колонка 1..7 СЛЕВА (проверено: cell-1-1 = левый верх,
+# фишка на нижнем ряду правой колонки = cell-6-7); фишка = SVG-круг внутри
+# клетки БЕЗ класса empty-slot (читать с задержкой >= 1.5 c после хода —
+# анимация); наш цвет ~#18BC9C, соперника ~#F16775; активный ход: у
+# .chronometer (первый — наш, левая шапка) появляется класс bg-secondary;
+# URL комнаты /en/r/<id>; у каждого игрока 4 минуты на партию (блиц).
+PAPERGAMES = Selectors(
+    board=".grid",
+    cell=".grid-item",
+    avatar_active_class="bg-secondary",
+    left_panel="",
+    right_panel="",
+)
+PAPERGAMES_MY_RGB = (24, 188, 156)
+PAPERGAMES_OPP_RGB = (241, 103, 117)
+
+_PAPERGAMES_READ_JS = r"""
+(myRgb, oppRgb) => {
+  const rect = el => { const r = el.getBoundingClientRect();
+    return {x: r.x, y: r.y, w: r.width, h: r.height}; };
+  const parseColor = s => { const m = (s || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    return m ? [+m[1], +m[2], +m[3]] : null; };
+  const dist = (a, b) => a && b ? Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]) : 1e9;
+
+  const out = {errors: [], grid: [], heights: [], col_centers: [], board_rect: null,
+               my_turn: false, timers: {}, dpr: window.devicePixelRatio || 1,
+               screen_x: window.screenX, screen_y: window.screenY,
+               chrome_top: Math.max(0, window.outerHeight - window.innerHeight),
+               covered: []};
+
+  const board = document.querySelector('.grid');
+  const cells = Array.from(document.querySelectorAll('.grid-item'));
+  if (!board || !cells.length) { out.errors.push('board/cells not found'); return out; }
+  out.board_rect = rect(board);
+
+  // размеры из класса size6x7 (CxR), иначе из координат
+  let W = 7, H = 6;
+  const mSize = String(board.className).match(/size(\d+)x(\d+)/);
+  if (mSize) { H = +mSize[1]; W = +mSize[2]; }
+  out.grid = Array.from({length: H}, () => new Array(W).fill(0));
+
+  const colCells = new Map();  // colIndex -> [cells]
+  for (const c of cells) {
+    const m = String(c.className).match(/cell-(\d+)-(\d+)/);
+    if (!m) continue;
+    const row1 = +m[1], col1 = +m[2];      // cell-{R}-{C}: R 1..6 сверху, C 1..7 слева
+    const col = col1 - 1;
+    const rowBottom0 = H - row1;           // наша сетка: row 0 = низ
+    const circles = Array.from(c.querySelectorAll('circle'));
+    const pieceCircle = circles.find(k => !k.classList.contains('empty-slot'));
+    if (pieceCircle) {
+      const fill = parseColor(getComputedStyle(pieceCircle).fill) ||
+                   parseColor(pieceCircle.getAttribute('fill'));
+      if (dist(fill, myRgb) <= 120) out.grid[rowBottom0][col] = 1;
+      else if (dist(fill, oppRgb) <= 120) out.grid[rowBottom0][col] = 2;
+      else out.errors.push('unknown disc color ' + JSON.stringify(fill));
+    }
+    if (!colCells.has(col)) colCells.set(col, []);
+    colCells.get(col).push(c);
+  }
+  let moves = 0;
+  for (const row of out.grid) for (const v of row) if (v) moves++;
+  out.moves = moves;
+  for (let c = 0; c < W; c++) {
+    let h = 0; while (h < H && out.grid[h][c]) h++;
+    out.heights.push(h);
+  }
+
+  // хронометры: первый — наш (левая шапка), активный = с классом bg-secondary
+  const chronos = Array.from(document.querySelectorAll('.chronometer'));
+  out.timers = {};
+  if (chronos[0]) {
+    out.timers.left = chronos[0].textContent.trim();
+    out.my_turn = chronos[0].classList.contains('bg-secondary');
+  }
+  if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
+
+  // центры нижних ячеек колонок + перекрытие
+  for (let c = 0; c < W; c++) {
+    const list = colCells.get(c) || [];
+    if (!list.length) { out.col_centers.push(null); out.covered.push(true); continue; }
+    const bottom = list.reduce((a, b) => rect(a).y > rect(b).y ? a : b);
+    const r = rect(bottom);
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    out.col_centers.push([cx, cy]);
+    const top = document.elementFromPoint(cx, cy);
+    out.covered.push(!(top === bottom || bottom.contains(top) || board.contains(top)));
+  }
+  return out;
+}
+"""
+
+
+def read_papergames(page) -> BoardSnapshot:
+    """Снимок живой доски papergames.io (селекторы разведаны 16.10.2026)."""
+    data = page.evaluate(_PAPERGAMES_READ_JS,
+                         [list(PAPERGAMES_MY_RGB), list(PAPERGAMES_OPP_RGB)])
+    return BoardSnapshot(
+        grid=data["grid"],
+        heights=data["heights"],
+        moves=data["moves"],
+        my_turn=data["my_turn"],
+        active_side="left" if data["my_turn"] else "right",
+        timers=data["timers"],
+        col_centers_client=data["col_centers"],
+        board_rect=data["board_rect"],
+        dpr=data["dpr"],
+        screen_x=data["screen_x"],
+        screen_y=data["screen_y"],
+        chrome_top_px=data["chrome_top"],
+        covered=data["covered"],
+        raw_errors=data.get("errors", []),
+    )
+
 
 @dataclass
 class BoardSnapshot:
