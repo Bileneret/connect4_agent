@@ -13,9 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from browser.cdp_connector import (  # noqa: E402
-    connect_tab, find_debug_ports, find_installed_browsers, launch_browser,
+    connect_tab, find_debug_ports, find_installed_browsers,
     list_tabs, wait_for_port,
 )
+from _cdp_testutil import prepare_test_browser, teardown_test_browser  # noqa: E402
 
 PORT = 9229  # внутри штатного диапазона коннектора (9222..9229), верхний край
 FIXTURE = ROOT / "tests" / "fixtures" / "connect4_mock.html"
@@ -29,12 +30,9 @@ def main():
     name, exe = sorted(installed.items())[0]
     print(f"браузер для теста: {name} ({exe})")
 
-    proc = launch_browser(exe, PORT, url=FIXTURE.as_uri(), headless=True)
+    proc = prepare_test_browser(exe, PORT, FIXTURE.as_uri(), headless=True)
     try:
-        if not wait_for_port(PORT, timeout=25):
-            print("FAIL: порт отладки не открылся (браузер, возможно, уже запущен)")
-            return 1
-        print(f"порт {PORT} открыт")
+        print(f"порт {PORT} открыт (изолированный профиль)")
 
         ports = find_debug_ports()
         assert PORT in ports, f"живой порт {PORT} не найден коннектором"
@@ -76,7 +74,7 @@ def main():
         print("ОФЛАЙН-ТЕСТ ЭТАПА 5: OK")
         return 0
     finally:
-        proc.terminate()
+        teardown_test_browser(proc, PORT)
 
 
 if __name__ == "__main__":

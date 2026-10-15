@@ -79,7 +79,9 @@
     const h = state.heights[c];
     if (h >= H) return;
     state.grid[h][c] = state.turn;
-    document.getElementById(`cell-${h}-${c}`).dataset.owner = String(state.turn);
+    const target = document.getElementById(`cell-${h}-${c}`);
+    target.dataset.owner = String(state.turn);
+    target.style.background = state.turn === 1 ? "#17B99A" : "#F16775";
     state.heights[c] = h + 1;
     state.turn = 3 - state.turn;
     refreshHeader();
