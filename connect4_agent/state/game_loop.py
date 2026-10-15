@@ -32,6 +32,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from config import ANIMATION_SETTLE_MS, CLICK_MAX_RETRIES, CLICK_VERIFY_MS, INPUT_MODE  # noqa: E402
+from state.session_manager import CLICK_MARGIN_S  # noqa: E402
 from engine.bitboard import (  # noqa: E402
     COLUMN_MASK, column_heights, compute_winning_position, grid_ownership_ok,
     possible_moves, possible_non_losing_moves, popcount64,
@@ -299,9 +300,15 @@ class GameLoop:
 
         deadline = self.session.think_deadline() or (time.time() + self.think_cap_s)
         left = max(0.0, deadline - time.time())
-        self.log(f"[loop] наш ход (moves={snap.moves}, бюджет {left:.1f} c)")
+        # равномерный расход общего банка: доля на ход = банк / оставшиеся наши ходы
+        cap = self.think_cap_s
+        tl = self.session.st.our_time_left_s
+        if tl is not None:
+            moves_left = max(2, (42 - snap.moves) // 2)
+            cap = min(cap, max(2.5, (tl - CLICK_MARGIN_S) / moves_left))
+        self.log(f"[loop] наш ход (moves={snap.moves}, бюджет {left:.1f} c, кап {cap:.1f} c)")
         dec = decide_move(self.engine, self.book, position, mask, snap.moves,
-                          deadline, think_cap_s=self.think_cap_s, log=self.log)
+                          deadline, think_cap_s=cap, log=self.log)
         self.stats[dec.kind] = self.stats.get(dec.kind, 0) + 1
         self.log(f"[loop] решение: {dec.kind}, колонка {dec.col + 1}"
                  + (f" | {dec.info}" if dec.info else ""))

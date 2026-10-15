@@ -32,7 +32,7 @@ def human_click(page, cx: float, cy: float, radius: float = 20.0, rng=None) -> N
     tx, ty = cx + dx, cy + dy
 
     try:
-        page.mouse.move(tx, ty, steps=rng.randint(3, 6))
+        page.mouse.move(tx, ty)          # один перелёт (без steps: меньше round-trip'ов)
     except Exception:  # noqa: BLE001
         pass
     time.sleep(rng.uniform(0.03, 0.09))
