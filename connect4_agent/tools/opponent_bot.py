@@ -42,8 +42,9 @@ READY_JS = r"""
     for (const cell of cells) {
       const m = String(cell.className).match(/cell-(\d+)-(\d+)/);
       if (!m || (+m[2] - 1) !== c) continue;
-      const hasPiece = Array.from(cell.querySelectorAll('circle'))
-          .some(k => !k.classList.contains('empty-slot'));
+      const hasPiece = !/piece-hover-placeholder/.test(String(cell.className)) &&
+          Array.from(cell.querySelectorAll('circle'))
+              .some(k => !k.classList.contains('empty-slot'));
       if (hasPiece) h += 1;
     }
     heights.push(h);

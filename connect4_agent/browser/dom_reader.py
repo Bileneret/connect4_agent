@@ -171,11 +171,23 @@ _PAPERGAMES_READ_JS = r"""
     const rowBottom0 = H - row1;
     const circles = Array.from(c.querySelectorAll('circle'));
     const pieceCircle = circles.find(k => !k.classList.contains('empty-slot'));
-    if (pieceCircle) {
+    // «клетка посадки под курсором» (piece-hover-placeholder) содержит круг
+    // нашего цвета как ПРЕВЬЮ хода — это не фишка на доске (найдено DPI-тестом)
+    const isHoverCell = /piece-hover-placeholder/.test(String(c.className));
+    if (pieceCircle && !isHoverCell) {
       const cs = getComputedStyle(pieceCircle);
       const cls = String(pieceCircle.getAttribute('class') || '');
       const fill = parseColor(cs.fill) || parseColor(pieceCircle.getAttribute('fill'));
-      if (cs.fill === 'none') {
+      // «превью хода»: элемент приписан клетке (обычно 6-1), но отрисован у
+      // колонки под курсором — его rect ВНЕ своей клетки; это не фишка
+      const cb = c.getBoundingClientRect();
+      const kb = pieceCircle.getBoundingClientRect();
+      const kcx = kb.x + kb.width / 2, kcy = kb.y + kb.height / 2;
+      const inside = kcx >= cb.x - 4 && kcx <= cb.x + cb.width + 4 &&
+                     kcy >= cb.y - 4 && kcy <= cb.y + cb.height + 4;
+      if (!inside) {
+        // трансформированный превью-круг — не фишка
+      } else if (cs.fill === 'none') {
         // превью наведения / анимационный каркас без заливки — не фишка
       } else if (cls.includes('circle-light') || cls.includes('circle-dark')) {
         const ownerSide = cls.includes('circle-light') ? 'left' : 'right';
