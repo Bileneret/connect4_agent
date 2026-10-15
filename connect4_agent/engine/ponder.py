@@ -119,6 +119,14 @@ class PonderManager:
         position, mask, moves = base
         scratch = self.engine.make_scratch()   # СВОЯ пара буферов сортировки:
         # иначе на одной глубине потоки перезаписывают списки ходов друг друга
+        try:  # пониженный приоритет ОС: под нагрузкой воркеры уступают CPU
+            # клику/верификации и браузеру (иначе CDP-раундтрипы растягиваются с
+            # миллисекунд до ~0.6 с — найдено на живой серии)
+            import ctypes
+            ctypes.windll.kernel32.SetThreadPriority(
+                ctypes.windll.kernel32.GetCurrentThread(), -1)  # BELOW_NORMAL
+        except Exception:  # noqa: BLE001 — не Windows/нет прав: не критично
+            pass
         for col in cols:
             if self._stop.is_set() or self._gen != gen:
                 return
