@@ -68,6 +68,7 @@ def live(auto=True):
     from engine.solver_numba import SolverEngine
     from actuator.hotkeys import HotkeyDispatcher
     from actuator.mouse_controller import MouseController
+    from state.bot_lock import LOCK_PATH, BotAlreadyRunning, acquire, release
     from state.game_loop import GameLoop, run_forever
     from state.session_manager import SessionManager
 
@@ -95,37 +96,71 @@ def live(auto=True):
         browser_port = conn.info.port
     print(f"Подключено к: {conn.info.title} | {conn.info.url} (порт {browser_port})")
 
-    engine = SolverEngine()
-    book = OpeningBook()
-    print(f"Книга: {'загружена, ' + format(len(book.keys), ',') + ' ключей' if book.available else 'нет'}")
-
-    ponder = PonderManager(engine, workers=2)  # Q28: фоновая работа в живом цикле
-    session = SessionManager(state_path=ROOT / "logs" / "session_state.json")
-    if session.restore():
-        print(f"[run] восстановлено состояние прошлой сессии: раунд {session.st.round_no}, "
-              f"ходов {session.st.moves} (Q45)")
-    mouse = MouseController()
-    loop = GameLoop(page=conn.page, engine=engine, book=book, session=session,
-                    mouse=mouse, apply_clicks=True, mode="auto", ponder=ponder,
-                    browser_port=browser_port)
-
-    dispatcher = HotkeyDispatcher()
-    dispatcher.bind("toggle_mode", lambda: setattr(
-        loop, "mode", "hint" if loop.mode == "auto" else "auto"))
-    dispatcher.bind("pause", lambda: setattr(loop, "paused", not loop.paused))
-    dispatcher.bind("resync", lambda: print("[run] F9: ресинк (логика в цикле)"))
-    dispatcher.bind("exit", lambda: setattr(loop, "running", False))
     try:
-        dispatcher.register()
-    except Exception as exc:  # noqa: BLE001 — без админ-прав хуки могут не встать
-        print(f"[run] глобальные хоткеи недоступны: {exc}")
+        acquire(port=browser_port, mode="live")
+    except BotAlreadyRunning as exc:
+        print(f"[run] {exc}")
+        return 1
+    print(f"[run] локфайл захвачен ({LOCK_PATH.name}, порт {browser_port}) — P1.3: "
+          "параллельные CDP-инструменты откажутся вмешиваться без --force")
+
+    dispatcher = None
     try:
-        run_forever(loop)
-    finally:
+        engine = SolverEngine()
+        book = OpeningBook()
+        print(f"Книга: {'загружена, ' + format(len(book.keys), ',') + ' ключей' if book.available else 'нет'}")
+
+        ponder = PonderManager(engine, workers=2)  # Q28: фоновая работа в живом цикле
+        session = SessionManager(state_path=ROOT / "logs" / "session_state.json")
+        if session.restore():
+            print(f"[run] восстановлено состояние прошлой сессии: раунд {session.st.round_no}, "
+                  f"ходов {session.st.moves} (Q45)")
+        mouse = MouseController()
+        loop = GameLoop(page=conn.page, engine=engine, book=book, session=session,
+                        mouse=mouse, apply_clicks=True, mode="auto", ponder=ponder,
+                        browser_port=browser_port)
+
+        dispatcher = HotkeyDispatcher()
+
+        def _toggle_mode():
+            loop.mode = "hint" if loop.mode == "auto" else "auto"
+            print(f"[run] F7: режим — {loop.mode}")
+
+        def _toggle_pause():
+            loop.paused = not loop.paused
+            print(f"[run] F8: {'пауза' if loop.paused else 'продолжаю'}")
+
+        def _request_resync():
+            print("[run] F9: ресинк (логика в цикле)")
+
+        def _request_exit():
+            # P1.5: различимая строка — источник остановки (F8 остаётся паузой)
+            print("[run] остановка: хоткей Esc (F8 — пауза, а не выход)")
+            loop.running = False
+
+        dispatcher.bind("toggle_mode", _toggle_mode)
+        dispatcher.bind("pause", _toggle_pause)
+        dispatcher.bind("resync", _request_resync)
+        dispatcher.bind("exit", _request_exit)
         try:
-            dispatcher.unregister()
-        except Exception:
-            pass
+            dispatcher.register()
+        except Exception as exc:  # noqa: BLE001 — без админ-прав хуки могут не встать
+            print(f"[run] глобальные хоткеи недоступны: {exc}")
+
+        stop_reason = "цикл завершился сам (running=False)"
+        try:
+            run_forever(loop)
+        except KeyboardInterrupt:
+            stop_reason = "Ctrl+C из консоли"
+        finally:
+            print(f"[run] остановка: {stop_reason}")
+    finally:
+        release()
+        if dispatcher is not None:
+            try:
+                dispatcher.unregister()
+            except Exception:
+                pass
     return 0
 
 

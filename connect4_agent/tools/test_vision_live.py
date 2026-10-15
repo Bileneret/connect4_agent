@@ -118,4 +118,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # P1.3: при живом боте не вмешиваемся в страницу без явного --force
+    from state.bot_lock import ensure_no_bot
+    ensure_no_bot("test_vision_live", force="--force" in sys.argv)
     sys.exit(main())

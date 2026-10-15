@@ -473,11 +473,13 @@ def run_forever(loop: GameLoop, tick_s: float = 0.25):
              "FAILSAFE: резкий увод курсора в угол ставит на паузу.")
     loop.paused_by_failures = False
     loop.paused_since = 0.0
+    stop_reason = "running=False (хоткей/внешняя остановка)"  # P1.5: источник в лог
     try:
         while loop.running:
             try:
                 loop.step()
             except KeyboardInterrupt:
+                stop_reason = "Ctrl+C из консоли"
                 break
             except Exception as exc:  # noqa: BLE001 — цикл не должен падать
                 loop.log(f"[loop] ошибка шага: {type(exc).__name__}: {exc}")
@@ -500,4 +502,4 @@ def run_forever(loop: GameLoop, tick_s: float = 0.25):
             time.sleep(tick_s)
     finally:
         loop.persist()
-        loop.log(f"[loop] остановлен. Статистика: {loop.stats}")
+        loop.log(f"[loop] остановлен ({stop_reason}). Статистика: {loop.stats}")

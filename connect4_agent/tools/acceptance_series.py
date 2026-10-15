@@ -212,4 +212,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # P1.3: задуман для совместной работы с запущенным ботом (run.py --live)
+    from state.bot_lock import ensure_bot
+    ensure_bot("acceptance_series", force="--force" in sys.argv)
     sys.exit(main())

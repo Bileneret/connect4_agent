@@ -17,6 +17,7 @@ papergames.io сюда будут вписаны его точные селек�
 from __future__ import annotations
 
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -175,8 +176,24 @@ _PAPERGAMES_READ_JS = r"""
 """
 
 
-def read_papergames(page) -> BoardSnapshot:
-    """Снимок живой доски papergames.io (селекторы разведаны 16.10.2026)."""
+UNKNOWN_RETRY_DELAY_S = 0.2   # P1.4: пауза перед повтором при транзиенте анимации
+
+
+def read_papergames(page, retry_on_unknown: bool = True) -> BoardSnapshot:
+    """Снимок живой доски papergames.io (селекторы разведаны 16.10.2026).
+
+    P1.4: у только что упавшей фишки fill может быть ещё null (анимация) —
+    транзиент «unknown disc color» лечится одним повтором чтения через ~200 мс.
+    """
+    snap = _read_papergames_once(page)
+    if (retry_on_unknown
+            and any(e.startswith("unknown disc color") for e in snap.raw_errors)):
+        time.sleep(UNKNOWN_RETRY_DELAY_S)
+        return _read_papergames_once(page)
+    return snap
+
+
+def _read_papergames_once(page) -> BoardSnapshot:
     from config import PLAYER_NAME
 
     data = page.evaluate(_PAPERGAMES_READ_JS,

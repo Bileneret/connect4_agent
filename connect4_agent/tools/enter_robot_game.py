@@ -61,4 +61,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # P1.3: задуман для совместной работы с запущенным ботом (run.py --live)
+    from state.bot_lock import ensure_bot
+    ensure_bot("enter_robot_game", force="--force" in sys.argv)
     sys.exit(main())
