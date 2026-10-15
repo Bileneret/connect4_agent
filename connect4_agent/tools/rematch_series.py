@@ -50,8 +50,11 @@ STATE_JS = r"""
   }
   const btns = Array.from(document.querySelectorAll('button, [role="button"]'))
       .map(b => (b.textContent || '').replace(/\s+/g, ' ').trim());
+  const chronos = Array.from(document.querySelectorAll('.chronometer'))
+      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  const myTurn = !!chronos[0] && chronos[0].classList.contains('bg-secondary');
   return {cells: cells, scores: scores.slice(0, 2), ours: ours, theirs: theirs,
-          total: total, firstCol: firstCol, firstOwner: firstOwner,
+          total: total, firstCol: firstCol, firstOwner: firstOwner, myTurn: myTurn,
           play_again: btns.some(t => /^Play again/i.test(t)),
           body: document.body.innerText.replace(/\s+/g, ' ').slice(0, 200)};
 }
@@ -113,32 +116,42 @@ def main():
                 except Exception as exc:  # noqa: BLE001
                     print("[rematch] не смог начать матч:", type(exc).__name__, flush=True)
         for i in range(1, n + 1):
-            # ждём начало раунда
+            # ждём первый КАМЕНЬ (пустая доска нового раунда — ещё не старт)
             t0 = time.time()
             started = False
             while time.time() - t0 < 90:
                 st = state(page)
-                if st["cells"]:
+                if st["total"] >= 1:
                     started = True
                     break
                 if st["play_again"]:
                     click_play_again(page)
                 time.sleep(POLL_S)
             if not started:
-                print(f"[{i}/{n}] доска не появилась за 90 с — пропуск", flush=True)
+                print(f"[{i}/{n}] первый камень не появился за 90 с — пропуск", flush=True)
                 results.append("?")
                 unknown += 1
                 continue
             before = st["scores"]
-            # кто начинал + первый ход робота (по первому наблюдению доски)
-            starter = None
+            # кто начинал: по СЧЁТУ камней разных классов (надёжно, без маркера —
+            # он переключается с задержкой ~1 с). Ждём момент, когда счётчики
+            # разошлись: перевес на одну фишку и есть первый игрок.
+            starter = "?"
             opener = None
-            if st["total"] == 1:
-                starter = "мы" if st["firstOwner"] == 1 else "Carlito"
-                opener = (st["firstCol"] or 0) + 1
-                first_seen_total = 1
-            else:
-                first_seen_total = st["total"]
+            t_s = time.time()
+            while time.time() - t_s < 12:
+                s2 = state(page)
+                if s2["total"] == 1 and s2["firstOwner"] is not None:
+                    starter = "мы" if s2["firstOwner"] == 1 else "Carlito"
+                    opener = (s2["firstCol"] or 0) + 1
+                    break
+                if s2["ours"] != s2["theirs"]:
+                    starter = "мы" if s2["ours"] > s2["theirs"] else "Carlito"
+                    opener = (s2["firstCol"] or 0) + 1 if s2["firstCol"] is not None else None
+                    break
+                if not s2["cells"] and s2["play_again"]:
+                    break
+                time.sleep(0.4)
             # ждём ПОДТВЕРЖДЁННЫЙ конец раунда: нет клеток И видна «Play again!»
             t1 = time.time()
             finished = False
@@ -177,7 +190,7 @@ def main():
             except Exception:  # noqa: BLE001
                 unknown += 1
             results.append(res)
-            print(f"[{i}/{n}] {res} | старт={starter or f'?({first_seen_total} камней)'}"
+            print(f"[{i}/{n}] {res} | старт={starter}"
                   f" первыйход_робота={opener} | наш={end_state['ours']} их={end_state['theirs']}"
                   f" | счёт {after} | {'НИЧЬЯ-экран ' if draw_hint else ''}{end_state['body'][:60]}",
                   flush=True)
