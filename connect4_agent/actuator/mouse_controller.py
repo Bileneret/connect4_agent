@@ -174,13 +174,27 @@ def find_browser_window_for_port(port: int):
 
 
 def ensure_foreground(hwnd) -> bool:
-    """Поднять окно наверх (развернуть, если свёрнуто)."""
+    """Поднять окно наверх (развернуть, если свёрнуто).
+
+    Windows блокирует смену фокуса фоновым процессам — классический обход:
+    краткое синтетическое нажатие Alt снимает foreground-lock, и следующий
+    SetForegroundWindow проходит. Проверка реального результата — по
+    GetForegroundWindow (не только по коду возврата).
+    """
     import ctypes
+    import time
 
     user32 = ctypes.windll.user32
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-    return bool(user32.SetForegroundWindow(hwnd))
+    for _ in range(3):
+        if user32.GetForegroundWindow() == hwnd:
+            return True
+        user32.keybd_event(0x12, 0, 0, 0)          # Alt down
+        user32.SetForegroundWindow(hwnd)
+        user32.keybd_event(0x12, 0, 2, 0)          # Alt up
+        time.sleep(0.15)
+    return user32.GetForegroundWindow() == hwnd
 
 
 def top_level_at(x: int, y: int):
