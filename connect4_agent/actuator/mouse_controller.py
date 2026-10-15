@@ -1,0 +1,103 @@
+"""Физическое управление системным курсором — Вопросы №3, №8, №39, №41, №47.
+
+Курсор плавно уводится к цели по квадратичной кривой Безье со случайной
+контрольной точкой (естественная дуга), в целевую точку добавляется гауссов
+микро-сдвиг внутри радиуса клетки 0.5·r. Клик — аппаратный: mouseDown ->
+пауза 40-75 мс -> mouseUp (pyautogui поверх SendInput). pyautogui.FAILSAFE
+включён: увод курсора в угол экрана мгновенно ставит бота на паузу (Q47).
+
+apply=False — сухой прогон: строится и возвращается полный план (точки пути,
+цель, тайминги), курсор НЕ двигается. Это позволяет тестировать и репетировать
+без Computer Use; реальные движения — только с apply=True при живом запуске.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from config import HOVER_MAX_MS, HOVER_MIN_MS  # noqa: E402
+
+
+@dataclass
+class ClickPlan:
+    start: tuple[float, float]
+    target: tuple[float, float]
+    points: list[tuple[float, float]]
+    hover_ms: int
+    down_ms: int
+    jitter: tuple[float, float] = field(default=(0.0, 0.0))
+
+
+class MouseController:
+    """Планировщик и исполнитель физических кликов (DPI-aware координаты)."""
+
+    def __init__(self, rng: random.Random | None = None):
+        self.rng = rng or random.Random()
+        self._last_pos: tuple[float, float] | None = None
+
+    # --- построение траектории ---------------------------------------------
+    def plan_column_click(self, cell_center: tuple[float, float],
+                          cell_radius: float,
+                          start: tuple[float, float] | None = None) -> ClickPlan:
+        """План клика: центр нижней ячейки + гауссов сдвиг, плавный путь.
+
+        cell_center/cell_radius — в физических пикселях экрана (после учёта DPI).
+        """
+        if start is None:
+            start = self._last_pos or (cell_center[0], cell_center[1] - 220)
+        # гауссов микро-сдвиг, ограниченный кругом 0.5 радиуса (Q41)
+        sigma = cell_radius * 0.22
+        limit = cell_radius * 0.5
+        dx = dy = limit * 2
+        while dx * dx + dy * dy > limit * limit:
+            dx = self.rng.gauss(0, sigma)
+            dy = self.rng.gauss(0, sigma)
+        target = (cell_center[0] + dx, cell_center[1] + dy)
+
+        # контрольная точка Безье: середина + случайный перпендикулярный снос
+        mx, my = (start[0] + target[0]) / 2, (start[1] + target[1]) / 2
+        vx, vy = target[0] - start[0], target[1] - start[1]
+        norm = math.hypot(vx, vy) or 1.0
+        px, py = -vy / norm, vx / norm
+        bow = self.rng.uniform(0.04, 0.16) * norm
+        ctrl = (mx + px * bow + self.rng.gauss(0, 3), my + py * bow + self.rng.gauss(0, 3))
+
+        steps = max(8, int(norm / 22))
+        points = []
+        for i in range(steps + 1):
+            t = i / steps
+            bx = (1 - t) ** 2 * start[0] + 2 * (1 - t) * t * ctrl[0] + t * t * target[0]
+            by = (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * ctrl[1] + t * t * target[1]
+            points.append((bx, by))
+        hover_ms = self.rng.randint(HOVER_MIN_MS, HOVER_MAX_MS)
+        down_ms = self.rng.randint(40, 75)
+        return ClickPlan(start=start, target=target, points=points,
+                         hover_ms=hover_ms, down_ms=down_ms, jitter=(dx, dy))
+
+    # --- исполнение ---------------------------------------------------------
+    def click(self, plan: ClickPlan, apply: bool = True) -> ClickPlan:
+        """Выполнить план (или сухой прогон при apply=False)."""
+        if not apply:
+            self._last_pos = plan.target
+            return plan
+        import pyautogui  # только в момент реального исполнения
+
+        pyautogui.FAILSAFE = True  # увод в угол => исключение => пауза (Q47)
+        per_seg = (plan.hover_ms / 1000.0) / max(1, len(plan.points) - 1)
+        for x, y in plan.points:
+            pyautogui.moveTo(int(round(x)), int(round(y)))
+            time.sleep(per_seg * self.rng.uniform(0.6, 1.4))
+        pyautogui.mouseDown()
+        time.sleep(plan.down_ms / 1000.0)
+        pyautogui.mouseUp()
+        self._last_pos = plan.target
+        return plan
