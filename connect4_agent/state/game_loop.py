@@ -248,6 +248,9 @@ class GameLoop:
                                   snap.moves)
                 self.log("[ponder] фон: расчёт ответов соперника")
             if e.kind in ("NEW_ROUND", "NEW_GAME", "GAME_OVER", "DISCONNECT"):
+                if e.kind in ("NEW_ROUND", "NEW_GAME"):
+                    # наблюдаемость: в комнатах/матчмейкинге мы бываем и СПРАВА
+                    self.log(f"[loop] сторона: мы {snap.my_side} (по видимому нику)")
                 self.persist()
                 if e.kind in ("GAME_OVER", "DISCONNECT") and self.ponder is not None:
                     self.ponder.stop()

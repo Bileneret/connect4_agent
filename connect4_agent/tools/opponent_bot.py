@@ -1,9 +1,10 @@
-"""Автоматический «друг» для приватной комнаты: заходит по ссылке и ходит
-случайными легальными колонками настоящими CDP-кликами (симулирует живого
-соперника). В приватной комнате ХОСТ ВСЕГДА СЛЕВА — у гостя «свой ход» = активен
-ПРАВЫЙ хронометр (.chronometer:nth). Жмёт Play/Continue при модалах.
+"""Автоматический «друг»: играет случайными легальными колонками настоящими
+CDP-кликами (симулирует живого соперника) и как гость приватной комнаты, и
+как её хост, и в матчмейкинге. Сторона (лево/право) определяется по ВИДИМОМУ
+нику друга в шапке, «свой ход» — активный (bg-secondary) хронометр на его
+стороне. Жмёт Play/Continue при модалах, НИКОГДА не жмёт Leave room/Resign.
 
-Запуск: python tools/opponent_bot.py <port> <room_url> [--moves N]
+Запуск: python tools/opponent_bot.py [port] [--secret 692]
 """
 
 import random
@@ -16,13 +17,25 @@ sys.path.insert(0, str(ROOT))
 
 from browser.cdp_connector import connect_tab, list_tabs  # noqa: E402
 
+FRIEND_NAME = "PlayerFriend"   # ник друга: по нему определяется сторона
+
 READY_JS = r"""
-() => {
+(cfg) => {
   const cells = Array.from(document.querySelectorAll('.grid-item'));
-  const chronos = Array.from(document.querySelectorAll('.chronometer'));
-  const myTurn = chronos.length >= 2
-      ? chronos[1].classList.contains('bg-secondary')   // гость справа
-      : false;
+  const chronos = Array.from(document.querySelectorAll('.chronometer'))
+      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+  // сторона по ВИДИМОМУ нику (друг бывает и хостом-слева, и гостем-справа)
+  let side = null;
+  for (const e of document.querySelectorAll('*')) {
+    if (e.children.length) continue;
+    if ((e.textContent || '').trim() !== cfg.name) continue;
+    const r = e.getBoundingClientRect();
+    if (r.top >= 140 || r.width <= 0 || r.height <= 0) continue;
+    side = (r.x + r.width / 2) < window.innerWidth / 2 ? "left" : "right";
+    break;
+  }
+  const our = chronos[side === "right" ? 1 : 0];
+  const myTurn = !!our && our.classList.contains('bg-secondary');
   const heights = [];
   for (let c = 0; c < 7; c++) {
     let h = 0;
@@ -35,7 +48,7 @@ READY_JS = r"""
     }
     heights.push(h);
   }
-  return {cells: cells.length, myTurn, heights, url: location.href};
+  return {cells: cells.length, myTurn, side, heights, url: location.href};
 }
 """
 
@@ -67,7 +80,7 @@ def click_button(page, names) -> bool:
 
 
 def handle_invite_flow(page, secret: str) -> bool:
-    """Экран приглашения: Secret code -> Play -> (Who are you?) -> Continue."""
+    """Экран приглашения (друг как ГОСТЬ): Secret code -> Play -> (Who are you?)."""
     st = page.evaluate("() => document.body.innerText.slice(0, 300)")
     if "wants to play with you" in st:
         try:
@@ -92,8 +105,13 @@ def handle_invite_flow(page, secret: str) -> bool:
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 9223
-    secret = sys.argv[2] if len(sys.argv) > 2 else "121"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    port = int(args[0]) if args else 9223
+    secret = "692"
+    if "--secret" in sys.argv:
+        i = sys.argv.index("--secret")
+        if i + 1 < len(sys.argv):
+            secret = sys.argv[i + 1]
     tabs = list_tabs(port)
     target = next((t for t in tabs if "papergames" in t.url), None)
     if not target:
@@ -106,7 +124,7 @@ def main():
         deadline = time.time() + 20 * 60
         moves = 0
         while time.time() < deadline:
-            st = page.evaluate(READY_JS)
+            st = page.evaluate(READY_JS, {"name": FRIEND_NAME})
             if not st["cells"]:
                 # экран приглашения / модалы — НИКОГДА не жмём Leave room
                 handle_invite_flow(page, secret)
@@ -122,7 +140,7 @@ def main():
                         page.mouse.click(tgt["x"], tgt["y"])
                         moves += 1
                         print(f"[friend] ход {moves}: колонка {col + 1} "
-                              f"(высоты {st['heights']})", flush=True)
+                              f"(сторона {st['side']}, высоты {st['heights']})", flush=True)
                 time.sleep(1.2)
                 continue
             time.sleep(0.8)

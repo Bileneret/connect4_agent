@@ -65,7 +65,7 @@ _PAPERGAMES_READ_JS = r"""
                                           // передал бы список одним параметром
   const rect = el => { const r = el.getBoundingClientRect();
     return {x: r.x, y: r.y, w: r.width, h: r.height}; };
-  const parseColor = s => { const m = (s || '').match(/rgba?\(\d+\),\s*(\d+),\s*(\d+)/);
+  const parseColor = s => { const m = (s || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
     return m ? [+m[1], +m[2], +m[3]] : null; };
   const dist = (a, b) => a && b ? Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]) : 1e9;
 
@@ -86,36 +86,28 @@ _PAPERGAMES_READ_JS = r"""
   if (mSize) { H = +mSize[1]; W = +mSize[2]; }
   out.grid = Array.from({length: H}, () => new Array(W).fill(0));
 
-  // СТОРОНА по нашему нику (в матчмейкинге мы бываем и справа), хронометры
-  // сортируем по x; наш ход — активен хронометр НАШЕЙ стороны
-  let mySide = "left";
-  const nameEl = Array.from(document.querySelectorAll('*')).find(e =>
-      e.children.length === 0 && (e.textContent || '').trim() === cfg.my_name
-      && e.getBoundingClientRect().top < 140);
-  if (nameEl) {
-    mySide = nameEl.getBoundingClientRect().left < window.innerWidth / 2 ? "left" : "right";
-  }
-  out.my_side = mySide;
+  // Хронометры сортируем по x; СТОРОНА — по ВИДИМОМУ элементу нашего ника
+  // (в матчмейкинге и комнатах мы бываем и справа; у скрытых копий ника
+  // rect 0x0 — их отбрасываем). Фолбэк стороны — по цвету точки-индикатора.
   const chronos = Array.from(document.querySelectorAll('.chronometer'))
       .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
   out.timers = {};
   if (chronos[0]) out.timers.left = chronos[0].textContent.trim();
   if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
-  const ourChrono = chronos[mySide === "left" ? 0 : 1];
-  const theirChrono = chronos[mySide === "left" ? 1 : 0];
-  if (ourChrono) out.my_turn = ourChrono.classList.contains('bg-secondary');
 
-  // цвета-индикаторы: насыщенные кружки-точки рядом с хронометрами
+  // точки-индикаторы цвета игроков в шапке: насыщенные круглые элементы
+  // БЕЗ текста (бейджи уровней «4»/«15» — тоже кружки, но с текстом)
   const dots = [];
   for (const e of document.querySelectorAll('*')) {
     const r = e.getBoundingClientRect();
     if (r.top > 140 || r.width < 8 || r.width > 46 || Math.abs(r.width - r.height) > 8) continue;
+    if ((e.textContent || '').trim()) continue;
     const c = parseColor(getComputedStyle(e).backgroundColor);
     if (!c) continue;
     if (Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) < 40) continue;
     dots.push({c: c, x: r.x + r.width / 2, y: r.y + r.height / 2});
   }
-  const dotNear = (chron) => {
+  const dotNear = (chron, radius) => {
     if (!chron) return null;
     const r = chron.getBoundingClientRect();
     const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
@@ -124,14 +116,52 @@ _PAPERGAMES_READ_JS = r"""
       const dd = Math.hypot(d.x - cx, (d.y - cy) * 1.5);
       if (dd < bd) { bd = dd; best = d; }
     }
-    return bd <= 170 ? best.c : null;
+    return bd <= (radius || 170) ? best.c : null;
   };
-  const ourDot = dotNear(ourChrono);
-  const theirDot = dotNear(theirChrono);
+
+  let mySide = null;
+  out.name_cands = 0;
+  for (const e of document.querySelectorAll('*')) {
+    if (e.children.length) continue;
+    if ((e.textContent || '').trim() !== cfg.my_name) continue;
+    const r = e.getBoundingClientRect();
+    if (r.top >= 140 || r.width <= 0 || r.height <= 0) continue;  // скрытые копии
+    out.name_cands += 1;
+    if (mySide === null) {
+      mySide = (r.x + r.width / 2) < window.innerWidth / 2 ? "left" : "right";
+    }
+  }
+  if (mySide === null) {
+    const n0 = dotNear(chronos[0], 500);
+    const n1 = dotNear(chronos[1], 500);
+    if (n0 && dist(n0, cfg.my) <= 120 && !(n1 && dist(n1, cfg.my) <= 120)) mySide = "left";
+    else if (n1 && dist(n1, cfg.my) <= 120) mySide = "right";
+  }
+  out.my_side = mySide || "left";
+  const ourChrono = chronos[out.my_side === "left" ? 0 : 1];
+  const theirChrono = chronos[out.my_side === "left" ? 1 : 0];
+  if (ourChrono) out.my_turn = ourChrono.classList.contains('bg-secondary');
+
+  // ЦВЕТ на нашей стороне = цвет наших фишек. В комнатах/матчмейкинге цвета
+  // назначаются ПО СТОРОНАМ (левый игрок — бирюза, правый — красно-розовый),
+  // независимо от «мы/они». Берём точку на нашей половине шапки; фолбэк —
+  // ближайшая точка к нашему хронометру (расширенный радиус 500).
+  let ourDot = null, theirDot = null;
+  for (const d of dots) {
+    const side = d.x < window.innerWidth / 2 ? "left" : "right";
+    if (side === out.my_side && !ourDot) ourDot = d.c;
+    if (side !== out.my_side && !theirDot) theirDot = d.c;
+  }
+  if (!ourDot) ourDot = dotNear(ourChrono, 500);
+  if (!theirDot) theirDot = dotNear(theirChrono, 500);
   if (ourDot) myRgb = ourDot;
   if (theirDot) oppRgb = theirDot;
+  out.my_rgb = myRgb;
+  out.opp_rgb = oppRgb;
 
-  // клетки: владелец по цвету фишки (калиброванные цвета выше)
+  // клетки: владелец по СТОРОНЕ класса фишки (circle-light = левый игрок,
+  // circle-dark = правый — игра назначает цвета по сторонам, не по «мы/они»);
+  // цвет — фолбэк для иных разметок. Круг с fill:none (превью наведения) — не фишка.
   const colCells = new Map();
   for (const c of cells) {
     const m = String(c.className).match(/cell-(\d+)-(\d+)/);
@@ -142,12 +172,20 @@ _PAPERGAMES_READ_JS = r"""
     const circles = Array.from(c.querySelectorAll('circle'));
     const pieceCircle = circles.find(k => !k.classList.contains('empty-slot'));
     if (pieceCircle) {
-      const fill = parseColor(getComputedStyle(pieceCircle).fill) ||
-                   parseColor(pieceCircle.getAttribute('fill'));
-      if (dist(fill, myRgb) <= 120) out.grid[rowBottom0][col] = 1;
+      const cs = getComputedStyle(pieceCircle);
+      const cls = String(pieceCircle.getAttribute('class') || '');
+      const fill = parseColor(cs.fill) || parseColor(pieceCircle.getAttribute('fill'));
+      if (cs.fill === 'none') {
+        // превью наведения / анимационный каркас без заливки — не фишка
+      } else if (cls.includes('circle-light') || cls.includes('circle-dark')) {
+        const ownerSide = cls.includes('circle-light') ? 'left' : 'right';
+        out.grid[rowBottom0][col] = (ownerSide === out.my_side) ? 1 : 2;
+      } else if (dist(fill, myRgb) <= 120) out.grid[rowBottom0][col] = 1;
       else if (dist(fill, oppRgb) <= 120) out.grid[rowBottom0][col] = 2;
       else out.errors.push('unknown disc color ' + JSON.stringify(fill) +
-                           ' my=' + JSON.stringify(myRgb) + ' opp=' + JSON.stringify(oppRgb));
+                           ' @cell-' + row1 + '-' + col1 +
+                           ' my=' + JSON.stringify(myRgb) + ' opp=' + JSON.stringify(oppRgb) +
+                           ' my_side=' + out.my_side);
     }
     if (!colCells.has(col)) colCells.set(col, []);
     colCells.get(col).push(c);
@@ -214,6 +252,7 @@ def _read_papergames_once(page) -> BoardSnapshot:
         chrome_top_px=data["chrome_top"],
         covered=data["covered"],
         raw_errors=data.get("errors", []),
+        my_side=data.get("my_side", "left"),
     )
 
 
@@ -233,6 +272,7 @@ class BoardSnapshot:
     chrome_top_px: float            # outerHeight - innerHeight: высота UI браузера над вьюпортом
     covered: list                   # covered[col] = True, если центр нижней ячейки перекрыт не-доской (Q7)
     raw_errors: list = field(default_factory=list)
+    my_side: str = "left"           # "left"|"right": где МЫ в шапке (по видимому нику)
 
     def col_center_screen_px(self, col: int) -> tuple[float, float]:
         """Экранные ФИЗИЧЕСКИЕ пиксели центра нижней ячейки колонки (best effort, Q8).
