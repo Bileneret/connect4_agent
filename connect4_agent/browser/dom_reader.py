@@ -55,11 +55,13 @@ PAPERGAMES = Selectors(
     left_panel="",
     right_panel="",
 )
-PAPERGAMES_MY_RGB = (24, 188, 156)
-PAPERGAMES_OPP_RGB = (241, 103, 117)
+PAPERGAMES_MY_RGB = (24, 188, 156)      # наш цвет (проверено на живом сайте)
+PAPERGAMES_OPP_RGB = (238, 102, 119)    # цвет соперника (живой замер 16.10.2026)
 
 _PAPERGAMES_READ_JS = r"""
-(myRgb, oppRgb) => {
+(cfg) => {
+  const myRgb = cfg.my, oppRgb = cfg.opp;   // ВАЖНО: dict-аргумент — Playwright
+                                            // иначе передаёт список как один параметр
   const rect = el => { const r = el.getBoundingClientRect();
     return {x: r.x, y: r.y, w: r.width, h: r.height}; };
   const parseColor = s => { const m = (s || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -138,7 +140,7 @@ _PAPERGAMES_READ_JS = r"""
 def read_papergames(page) -> BoardSnapshot:
     """Снимок живой доски papergames.io (селекторы разведаны 16.10.2026)."""
     data = page.evaluate(_PAPERGAMES_READ_JS,
-                         [list(PAPERGAMES_MY_RGB), list(PAPERGAMES_OPP_RGB)])
+                         {"my": list(PAPERGAMES_MY_RGB), "opp": list(PAPERGAMES_OPP_RGB)})
     return BoardSnapshot(
         grid=data["grid"],
         heights=data["heights"],
