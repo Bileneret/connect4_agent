@@ -103,12 +103,19 @@ def test_emergency_and_deadline():
 
 
 def test_loop_click_verify():
-    """Фейковая страница: первый клик «не срабатывает», второй — успешен."""
+    """Фейковая страница: первый клик «не срабатывает», второй — успешен.
+
+    Верификация — по числу НАШИХ фишек: неудачный снимок без изменений,
+    успешный — ровно на одну нашу фишку больше.
+    """
+    import copy
     p, m, mv = load_position("4433")
     snap1 = make_snap(p, m, True, mv)
-    p2, m2, mv2 = load_position("44334")
-    snap2_fail = make_snap(p2 ^ m2, m2, True, mv)      # доска не изменилась
-    snap2_ok = make_snap(p2 ^ m2, m2, True, mv + 1)    # наш ход появился? нет: ходы+1
+    snap2_fail = copy.deepcopy(snap1)  # доска не изменилась
+    snap2_ok = copy.deepcopy(snap1)    # наша фишка добавилась
+    snap2_ok.grid[0][0] = 1
+    snap2_ok.heights[0] = 1
+    snap2_ok.moves = mv + 1
 
     reads = [snap1, snap2_fail, snap2_ok]
     def fake_read(page):

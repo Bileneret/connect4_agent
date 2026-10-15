@@ -160,6 +160,11 @@ def decide_move(engine, book, position, mask, moves, deadline_ts,
                     scores={c: ("PANIC" if c == col else None) for c in range(7)})
 
 
+def _count_ours(grid) -> int:
+    """Число НАШИХ фишек на доске (метка 1 у ридера = наш цвет)."""
+    return sum(1 for row in (grid or []) for v in row if v == 1)
+
+
 class GameLoop:
     """Оркестратор: снимок -> событие -> решение -> физический клик -> проверка."""
 
@@ -396,8 +401,12 @@ class GameLoop:
             self.stats["clicks"] += 1
             time.sleep(waits[min(attempt, len(waits) - 1)])
             snap2 = self.read_fn(self.page)
-            if snap2 and snap2.grid and (snap2.moves == snap.moves + 1
-                                         or not snap2.my_turn):
+            # верификация по числу НАШИХ фишек (устойчиво к одновременным ходам
+            # соперника, в отличие от проверки общего счётчика moves), либо
+            # по передаче хода
+            if snap2 and snap2.grid and (
+                    _count_ours(snap2.grid) == _count_ours(snap.grid) + 1
+                    or not snap2.my_turn):
                 self.log(f"[loop] клик подтверждён за {time.time() - t_start:.1f} с "
                          f"(попытка {attempt + 1})")
                 return True
