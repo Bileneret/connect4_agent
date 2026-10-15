@@ -117,26 +117,31 @@ def wait_match_end(page, max_s: float = 420.0) -> bool:
 
 def read_last_result(page):
     """Открыть History и вернуть (наша_победа: bool|None, детали) последнего матча."""
-    try:
-        page.get_by_text("History", exact=True).first.click(timeout=4000)
-        time.sleep(2.0)
-        rows = page.evaluate("""() => {
-          const seen = [];
-          for (const el of document.querySelectorAll('div, li, tr')) {
-            const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-            if (t.includes('Player') && t.includes('Sofia') && t.length < 400) seen.push(t);
-          }
-          return [...new Set(seen)].slice(0, 3);
-        }""")
-        if not rows:
-            return None, "нет строк истории"
-        m = HISTORY_RE.search(rows[0])
-        if not m:
-            return None, rows[0][:160]
-        ours, theirs = int(m.group(1)), int(m.group(2))
-        return ours > theirs, f"{ours}:{theirs} | {rows[0][:120]}"
-    except Exception as exc:  # noqa: BLE001
-        return None, f"ошибка чтения истории: {type(exc).__name__}"
+    for attempt in (1, 2):
+        try:
+            page.goto("https://papergames.io/en/connect4", timeout=20000)
+            time.sleep(1.5)
+            page.get_by_text("History", exact=True).first.click(force=True, timeout=5000)
+            time.sleep(2.0)
+            rows = page.evaluate("""() => {
+              const seen = [];
+              for (const el of document.querySelectorAll('div, li, tr')) {
+                const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (t.includes('Player') && t.includes('Sofia') && t.length < 400) seen.push(t);
+              }
+              return [...new Set(seen)].slice(0, 3);
+            }""")
+            if not rows:
+                return None, "нет строк истории"
+            m = HISTORY_RE.search(rows[0])
+            if not m:
+                return None, rows[0][:160]
+            ours, theirs = int(m.group(1)), int(m.group(2))
+            return ours > theirs, f"{ours}:{theirs} | {rows[0][:120]}"
+        except Exception as exc:  # noqa: BLE001
+            last = f"ошибка чтения истории (попытка {attempt}): {type(exc).__name__}"
+            time.sleep(1.0)
+    return None, last
 
 
 def back_to_game_page(page):
