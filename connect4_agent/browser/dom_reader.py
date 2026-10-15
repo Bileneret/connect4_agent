@@ -273,50 +273,6 @@ _READ_JS = r"""
     return el ? parseRgb(getComputedStyle(el).backgroundColor) : null;
   })();
 
-  // СТОРОНА определяется ПО НАШЕМУ НИКУ (в матчмейкинге мы бываем и справа!),
-  // активный ход — у хронометра на НАШЕЙ стороне (класс bg-secondary)
-  let mySide = "left";
-  const nameEl = Array.from(document.querySelectorAll('*')).find(e =>
-      e.children.length === 0 && (e.textContent || '').trim() === cfg.my_name
-      && e.getBoundingClientRect().top < 140);
-  if (nameEl) {
-    mySide = nameEl.getBoundingClientRect().left < window.innerWidth / 2 ? "left" : "right";
-  }
-  const chronos = Array.from(document.querySelectorAll('.chronometer'))
-      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-  out.timers = {};
-  if (chronos[0]) out.timers.left = chronos[0].textContent.trim();
-  if (chronos[1]) out.timers.right = chronos[1].textContent.trim();
-  const ourChrono = chronos[mySide === "left" ? 0 : 1];
-  if (ourChrono) out.my_turn = ourChrono.classList.contains('bg-secondary');
-  out.my_side = mySide;
-
-  // цвета: индикаторы-кружки рядом с хронометрами (наш — у нашего таймера)
-  const dots = [];
-  for (const e of document.querySelectorAll('*')) {
-    const r = e.getBoundingClientRect();
-    if (r.top > 140 || r.width < 8 || r.width > 46 || Math.abs(r.width - r.height) > 8) continue;
-    const c = parseColor(getComputedStyle(e).backgroundColor);
-    if (!c) continue;
-    if (Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) < 40) continue;
-    dots.push({c: c, x: r.x + r.width / 2, y: r.y + r.height / 2});
-  }
-  const dotNear = (chron) => {
-    if (!chron) return null;
-    const r = chron.getBoundingClientRect();
-    const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-    let best = null, bd = 1e9;
-    for (const d of dots) {
-      const dd = Math.hypot(d.x - cx, (d.y - cy) * 1.5);
-      if (dd < bd) { bd = dd; best = d; }
-    }
-    return bd <= 170 ? best.c : null;
-  };
-  const ourDot = dotNear(ourChrono);
-  const theirDot = dotNear(chronos[mySide === "left" ? 1 : 0]);
-  if (ourDot) out.my_rgb = ourDot;
-  if (theirDot) out.opp_rgb = theirDot;
-
   const owners = new Map();
   const colorVotes = [];
   for (const [rc, c] of byRC) {
