@@ -18,9 +18,16 @@ from state.session_manager import SessionManager  # noqa: E402
 
 
 class FakeBook:
-    def __init__(self, answer=None):
-        self.available = answer is not None
+    """Фейковая книга: known_children — точные известные оценки детей."""
+    def __init__(self, answer=None, known=None):
+        if known is None and answer is not None:
+            known = [(c, 1 if c == answer else 0) for c in range(7)]
+        self._known = known or []
+        self.available = bool(self._known)
         self.answer = answer
+
+    def known_children(self, position, mask, moves=0):
+        return list(self._known)
 
     def best_move(self, position, mask, moves=0):
         return self.answer
@@ -111,7 +118,7 @@ def test_loop_click_verify():
     session = SessionManager()
     loop = GameLoop(page=object(), engine=SolverEngine(max_gb=0.05), book=FakeBook(3),
                     session=session, mouse=mouse, read_fn=fake_read,
-                    apply_clicks=False, think_cap_s=0.1)
+                    apply_clicks=False, think_cap_s=0.1, human_rhythm=False)
     result = loop.step()
     assert result == "clicked", result
     assert loop.stats["clicks"] == 2 and loop.stats["retries"] == 1, loop.stats
@@ -124,7 +131,7 @@ def test_loop_hint_mode():
     snap = make_snap(p, m, True, mv)
     loop = GameLoop(page=object(), engine=SolverEngine(max_gb=0.05), book=FakeBook(2),
                     session=SessionManager(), mouse=FakeMouse(),
-                    read_fn=lambda page: snap, apply_clicks=False, mode="hint")
+                    read_fn=lambda page: snap, apply_clicks=False, mode="hint", human_rhythm=False)
     assert loop.step() == "hint" and loop.stats["clicks"] == 0
     print("  hint-режим: решение без кликов, OK")
 
@@ -135,9 +142,40 @@ def test_loop_resync_on_desync():
     snap.heights[0] = 5  # искусственный рассинхрон высот
     loop = GameLoop(page=object(), engine=SolverEngine(max_gb=0.05), book=FakeBook(2),
                     session=SessionManager(), mouse=FakeMouse(),
-                    read_fn=lambda page: snap, apply_clicks=False)
+                    read_fn=lambda page: snap, apply_clicks=False, human_rhythm=False)
     assert loop.step() == "resync", "рассинхрон высот должен давать ресинк"
     print("  рассинхрон высот -> ресинк, OK")
+
+
+def test_tie_randomization():
+    """Q36: среди равноценных лучших ходов выбор случайный, не один и тот же."""
+    class TieBook:
+        available = True
+        def best_move(self, *a): return None
+        def known_children(self, position, mask, moves=0):
+            vals = {0: 5, 3: 5, 6: 3}
+            return [(c, vals.get(c, 0)) for c in range(7)]
+    p, m, mv = load_position("")
+    picks = set()
+    for _ in range(24):
+        dec = decide_move(None, TieBook(), p, m, mv, time.time() + 30)
+        assert dec.kind == "book" and dec.col in (0, 3), dec
+        picks.add(dec.col)
+    assert picks == {0, 3}, f"рандом не развёл равноценные ходы: {picks}"
+    print("  рандомизация равных (Q36): оба лучших хода встречаются — OK")
+
+
+def test_covered_wait():
+    """Q7: перекрытый попапом центр колонки -> клика нет, ожидание."""
+    p, m, mv = load_position("4433")
+    snap = make_snap(p, m, True, mv)
+    snap.covered = [True] * 7
+    loop = GameLoop(page=object(), engine=SolverEngine(max_gb=0.05), book=FakeBook(2),
+                    session=SessionManager(), mouse=FakeMouse(),
+                    read_fn=lambda page: snap, apply_clicks=False, human_rhythm=False)
+    assert loop.step() == "covered_wait", "покрытая колонка должна ставить на ожидание"
+    assert loop.stats.get("clicks", 0) == 0
+    print("  covered-попап (Q7): клик отложен — OK")
 
 
 def main():
@@ -146,6 +184,8 @@ def main():
     test_loop_click_verify()
     test_loop_hint_mode()
     test_loop_resync_on_desync()
+    test_tie_randomization()
+    test_covered_wait()
     print("ИГРОВОЙ ЦИКЛ — ОФЛАЙН: ВСЁ OK")
     return 0
 

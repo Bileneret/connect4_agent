@@ -18,10 +18,11 @@
 
 from __future__ import annotations
 
+import random
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +45,13 @@ MID_COL = 3
 class Decision:
     kind: str
     col: int
+    scores: dict = field(default_factory=dict)   # col -> int | str (для оверлея)
+    info: str = ""                                # телеметрия (напр. узлы/с)
+
+
+def _playable_cols(mask) -> int:
+    possible = int(possible_moves(mask))
+    return sum(1 for c in range(7) if possible & int(COLUMN_MASK[c]))
 
 
 def _col_of(bit: int) -> int:
@@ -81,27 +89,46 @@ def choose_emergency(position, mask, moves=0) -> int:
 
 
 def decide_move(engine, book, position, mask, moves, deadline_ts,
-                think_cap_s=20.0, log=print) -> Decision:
+                think_cap_s=20.0, log=print, rng=None) -> Decision:
     """Решение хода по каскаду политик (см. модульный docstring)."""
-    # 1) книга
+    rng = rng or random
+    # 1) книга: если известны ВСЕ дети — выбор среди равноценных лучших (Q36)
     if book is not None and getattr(book, "available", False):
-        bm = book.best_move(position, mask, moves)
-        if bm is not None:
-            return Decision("book", int(bm))
+        known = book.known_children(position, mask, moves)
+        n_play = _playable_cols(mask)
+        scores_map = dict(known)
+        if known and len(known) == n_play:
+            top = max(v for _, v in known)
+            cols = [c for c, v in known if v == top]
+            return Decision("book", rng.choice(cols), scores=scores_map)
     # 2) тактика
     win = _winning_cells(position, mask)
     if win:
-        return Decision("tactical_win", _col_of(win & -win))
+        cells = []
+        w = win
+        while w:
+            b = w & -w
+            w ^= b
+            cells.append(_col_of(b))
+        return Decision("tactical_win", rng.choice(cells),
+                        scores={c: ("WIN" if c in cells else None) for c in range(7)},
+                        info=f"немедленная победа, вариантов {len(cells)}")
     forced = _opp_forced_cells(position, mask)
     if forced and (forced & (forced - 1)) == 0:
-        return Decision("tactical_block", _col_of(forced))
+        col = _col_of(forced)
+        return Decision("tactical_block", col,
+                        scores={c: ("BLOCK" if c == col else None) for c in range(7)})
     # 3) точный расчёт в отдельном потоке с бюджетом
     box: dict = {}
 
     def work():
         try:
-            col, score, _ = engine.best_column(position, mask, moves)
-            box["r"] = (int(col), int(score))
+            t0 = time.time()
+            n0 = engine.nodes
+            res = engine.best_column(position, mask, moves)  # (col, best, [(col,score)...])
+            dt = max(1e-6, time.time() - t0)
+            rate = (engine.nodes - n0) / dt / 1e6
+            box["r"] = (int(res[0]), int(res[1]), res[2], rate)
         except Exception as exc:  # noqa: BLE001 — доносим любую ошибку расчёта
             box["err"] = exc
 
@@ -111,15 +138,26 @@ def decide_move(engine, book, position, mask, moves, deadline_ts,
     while time.time() < limit and "r" not in box and "err" not in box:
         time.sleep(0.05)
     if "r" in box:
-        return Decision("exact", box["r"][0])
+        col, best, results, rate = box["r"]
+        # Q36: случайный выбор среди строго равноценных лучших ходов
+        top = max(v for _, v in results)
+        cols = [c for c, v in results if v == top]
+        chosen = rng.choice(cols) if cols else col
+        return Decision("exact", int(chosen),
+                        scores=dict(results),
+                        info=f"точн. {rate:.1f} млн узл/с, равных лучших: {len(cols)}")
     # 3б) частичная книга: максимум среди ТОЧНЫХ известных детей
     if book is not None and getattr(book, "available", False):
         known = book.known_children(position, mask, moves)
         if known:
-            col = max(known, key=lambda t: (t[1], -abs(t[0] - MID_COL)))[0]
-            return Decision("book_partial", int(col))
+            top = max(v for _, v in known)
+            cols = [c for c, v in known if v == top]
+            return Decision("book_partial", int(rng.choice(cols)),
+                            scores=dict(known))
     # 4) экстренный ход — не зависаем
-    return Decision("emergency", choose_emergency(position, mask, moves))
+    col = choose_emergency(position, mask, moves)
+    return Decision("emergency", col,
+                    scores={c: ("PANIC" if c == col else None) for c in range(7)})
 
 
 class GameLoop:
@@ -127,7 +165,7 @@ class GameLoop:
 
     def __init__(self, page, engine, book, session, mouse,
                  read_fn=None, apply_clicks=True, mode="auto", log=print,
-                 think_cap_s=20.0):
+                 think_cap_s=20.0, ponder=None, human_rhythm=True):
         if read_fn is None:
             from browser.dom_reader import read_papergames
             read_fn = read_papergames
@@ -142,6 +180,8 @@ class GameLoop:
         self.paused = False
         self.running = True
         self.think_cap_s = think_cap_s
+        self.ponder = ponder
+        self.human_rhythm = human_rhythm
         self.log = log
         self.last_opponent_move_ts = 0.0
         self.failures = 0
@@ -190,8 +230,19 @@ class GameLoop:
             self.log(f"[loop] событие: {e}")
             if e.kind == "OPPONENT_MOVE":
                 self.last_opponent_move_ts = time.time()
+                if self.ponder is not None:
+                    val = self.ponder.notify_move(e.detail["col"])
+                    self.log("[ponder] ответ соперника: " + (
+                        f"готовый расчёт {val}" if val is not None else "расчёта нет"))
+            if e.kind == "OUR_MOVE" and self.ponder is not None:
+                # старт предрасчёта его ответов на позиции ПОСЛЕ нашего хода
+                self.ponder.start(self.session.st.position, self.session.st.mask,
+                                  snap.moves)
+                self.log("[ponder] фон: расчёт ответов соперника")
             if e.kind in ("NEW_ROUND", "NEW_GAME", "GAME_OVER", "DISCONNECT"):
                 self.persist()
+                if e.kind in ("GAME_OVER", "DISCONNECT") and self.ponder is not None:
+                    self.ponder.stop()
         if self.paused or not snap.my_turn:
             return None
 
@@ -206,6 +257,8 @@ class GameLoop:
         if snap.heights != column_heights(mask):
             self.log(f"[loop] РАССИНХРОН высот: dom={snap.heights} "
                      f"eng={column_heights(mask)} -> ресинк из DOM")
+            self._dump_incident("desync_heights",
+                                {"dom": snap.heights, "eng": column_heights(mask)})
             return "resync"
 
         deadline = self.session.think_deadline() or (time.time() + self.think_cap_s)
@@ -214,19 +267,35 @@ class GameLoop:
         dec = decide_move(self.engine, self.book, position, mask, snap.moves,
                           deadline, think_cap_s=self.think_cap_s, log=self.log)
         self.stats[dec.kind] = self.stats.get(dec.kind, 0) + 1
-        self.log(f"[loop] решение: {dec.kind}, колонка {dec.col + 1}")
+        self.log(f"[loop] решение: {dec.kind}, колонка {dec.col + 1}"
+                 + (f" | {dec.info}" if dec.info else ""))
         self.persist()
+
+        # Q44: оверлей оценок колонок над доской (в обоих режимах)
+        self._show_overlay(snap, dec)
+
         if self.mode == "hint":
             return "hint"
         if snap.heights[dec.col] >= 6:
             self.log("[loop] колонка полна — ресинк")
+            self._dump_incident("column_full", {"col": dec.col, "heights": snap.heights})
             return "resync"
+        # Q7: доска перекрыта попапом — не кликаем, ждём закрытия человеком
+        if snap.covered and snap.covered[dec.col]:
+            self._log_throttled("covered", "[loop] центр колонки перекрыт попапом "
+                                           "(Q7) — жду закрытия окна")
+            return "covered_wait"
+        # Q35: человеческий ритм — короткая пауза перед кликом, в бюджете
+        self._human_pause(dec, deadline)
         ok = self._click_and_verify(dec.col, snap)
         if ok:
             self.failures = 0
             self.persist()
             return "clicked"
         self.failures += 1
+        self._dump_incident("click_failed", {"col": dec.col, "stats": dict(self.stats),
+                                             "heights": snap.heights,
+                                             "my_turn": snap.my_turn})
         if self.failures >= 2:
             self.paused = True
             self.log("[loop] две неудачи подряд — пауза (F8 для продолжения)")
@@ -292,6 +361,53 @@ class GameLoop:
         except Exception as exc:  # noqa: BLE001
             self.log(f"[loop] persist не удался: {exc}")
 
+    # --- вспомогательные живого режима -------------------------------------
+    def _log_throttled(self, key: str, msg: str, interval: float = 30.0):
+        now = time.time()
+        if not hasattr(self, "_throttle"):
+            self._throttle = {}
+        if now - self._throttle.get(key, 0.0) > interval:
+            self.log(msg)
+            self._throttle[key] = now
+
+    def _dump_incident(self, kind: str, payload: dict):
+        """Q46: дамп сохраняется только при инцидентах (JSON + скриншот)."""
+        try:
+            from state.incident_logger import dump_incident
+            folder = dump_incident(kind, payload, page=self.page)
+            self.log(f"[loop] дамп инцидента сохранён: {folder.name}")
+        except Exception as exc:  # noqa: BLE001 — дамп не должен ломать цикл
+            self.log(f"[loop] дамп инцидента не удался: {exc}")
+
+    def _show_overlay(self, snap, dec: Decision):
+        """Q44: метки оценок колонок над доской (в Auto и Hint-режимах)."""
+        if not getattr(snap, "board_rect", None):
+            return
+        try:
+            from browser import overlay
+            per_col = [dec.scores.get(c) if dec.scores else None for c in range(7)]
+            overlay.inject(self.page, snap.board_rect, per_col, best_col=dec.col)
+        except Exception as exc:  # noqa: BLE001 — оверлей не должен ломать игру
+            self._log_throttled("overlay_err", f"[loop] оверлей не показан: {exc}")
+
+    def _human_pause(self, dec: Decision, deadline: float):
+        """Q35: коротко на вынужденных, вдумчиво в развилках — строго в бюджете."""
+        if not self.human_rhythm:
+            return
+        from config import (CONSIDERED_COLUMNS_THRESHOLD, CONSIDERED_EXTRA_MS,
+                            RAPID_EXTRA_MS)
+        r = random.Random()
+        known = [v for v in (dec.scores or {}).values() if isinstance(v, int)]
+        if (dec.kind in ("tactical_win", "tactical_block")
+                or len(known) < CONSIDERED_COLUMNS_THRESHOLD):
+            extra = r.uniform(*RAPID_EXTRA_MS) / 1000.0
+        else:
+            extra = r.uniform(*CONSIDERED_EXTRA_MS) / 1000.0
+        extra = max(0.0, min(extra, (deadline - time.time()) - 6.0))
+        if extra > 0:
+            self.log(f"[loop] человеческий ритм: пауза {extra:.2f} с")
+            time.sleep(extra)
+
 
 def run_forever(loop: GameLoop, tick_s: float = 0.25):
     loop.log("[loop] запущен. F7 — Auto/Hint, F8 — пауза, F9 — ресинк, Esc — выход. "
@@ -306,6 +422,8 @@ def run_forever(loop: GameLoop, tick_s: float = 0.25):
                 break
             except Exception as exc:  # noqa: BLE001 — цикл не должен падать
                 loop.log(f"[loop] ошибка шага: {type(exc).__name__}: {exc}")
+                if loop.failures < 3:  # Q46: первые сбои фиксируем дампом
+                    loop._dump_incident("step_error", {"error": repr(exc)})
                 loop.failures += 1
                 time.sleep(1.0)  # перезагрузки страниц/навигации не должны «съедать» счётчик
                 if loop.failures >= 10 and not loop.paused:

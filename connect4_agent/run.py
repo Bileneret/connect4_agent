@@ -59,40 +59,52 @@ def selftest():
     return 0
 
 
-def live(auto_tab=True):
+def live(auto=True):
     """Живой автопилот: CDP-подключение, книга, движок, физическая мышь (Этапы 5-7)."""
     from config import TARGET_URL_HINT
     from browser.cdp_connector import connect_tab, find_debug_ports, list_tabs
     from engine.opening_book import OpeningBook
+    from engine.ponder import PonderManager
     from engine.solver_numba import SolverEngine
     from actuator.hotkeys import HotkeyDispatcher
     from actuator.mouse_controller import MouseController
     from state.game_loop import GameLoop, run_forever
     from state.session_manager import SessionManager
 
-    ports = find_debug_ports()
-    if not ports:
-        print("Нет живого порта отладки CDP. Сначала запустите браузер с "
-              "--remote-debugging-port=9222 (см. browser/cdp_connector.py).")
-        return 1
-    tabs = []
-    for p in ports:
-        tabs.extend(list_tabs(p))
-    target = next((t for t in tabs if TARGET_URL_HINT in t.url), None)
-    if target is None:
-        print("Вкладка papergames.io не найдена. Откройте игру и повторите.")
-        return 1
-    conn = connect_tab(target)
-    print(f"Подключено к: {target.title} | {target.url}")
+    if auto:
+        ports = find_debug_ports()
+        if not ports:
+            print("Нет живого порта отладки CDP. Сначала запустите браузер с "
+                  "--remote-debugging-port=9222 (см. browser/cdp_connector.py).")
+            return 1
+        tabs = []
+        for p in ports:
+            tabs.extend(list_tabs(p))
+        target = next((t for t in tabs if TARGET_URL_HINT in t.url), None)
+        if target is None:
+            print("Вкладка papergames.io не найдена. Откройте игру и повторите.")
+            return 1
+        conn = connect_tab(target)
+    else:
+        # Q1: интерактивный выбор браузера/вкладки (нумерованный список)
+        from browser.cdp_connector import choose_and_connect
+        conn = choose_and_connect(interactive=True)
+        if conn is None:
+            return 1
+    print(f"Подключено к: {conn.info.title} | {conn.info.url}")
 
     engine = SolverEngine()
     book = OpeningBook()
     print(f"Книга: {'загружена, ' + format(len(book.keys), ',') + ' ключей' if book.available else 'нет'}")
 
+    ponder = PonderManager(engine, workers=2)  # Q28: фоновая работа в живом цикле
     session = SessionManager(state_path=ROOT / "logs" / "session_state.json")
+    if session.restore():
+        print(f"[run] восстановлено состояние прошлой сессии: раунд {session.st.round_no}, "
+              f"ходов {session.st.moves} (Q45)")
     mouse = MouseController()
     loop = GameLoop(page=conn.page, engine=engine, book=book, session=session,
-                    mouse=mouse, apply_clicks=True, mode="auto")
+                    mouse=mouse, apply_clicks=True, mode="auto", ponder=ponder)
 
     dispatcher = HotkeyDispatcher()
     dispatcher.bind("toggle_mode", lambda: setattr(
@@ -120,12 +132,14 @@ def main():
                         help="проверка окружения и ядра (по умолчанию)")
     parser.add_argument("--live", action="store_true",
                         help="живой автопилот в уже открытой вкладке papergames.io")
+    parser.add_argument("--interactive", action="store_true",
+                        help="с --live: интерактивный выбор браузера/вкладки (Q1)")
     args = parser.parse_args()
 
     enable_dpi_awareness()
 
     if args.live:
-        return live()
+        return live(auto=not args.interactive)
     # Этап 1: без --live — проверка окружения и ядра.
     return selftest()
 

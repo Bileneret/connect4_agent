@@ -67,8 +67,12 @@ _PRESENT_JS = r"""
 """
 
 
-def label_text(score: int) -> str:
-    """Формат метки по плану Q44: WIN +n / DRAW 0 / LOSS -n."""
+def label_text(score) -> str:
+    """Метка колонки: int -> WIN +n / DRAW 0 / LOSS -n; str -> как есть; None -> '?'."""
+    if score is None:
+        return "?"
+    if isinstance(score, str):
+        return score
     if score > 0:
         return f"WIN +{score}"
     if score < 0:
@@ -76,11 +80,11 @@ def label_text(score: int) -> str:
     return "DRAW 0"
 
 
-def inject(page, board_rect: dict, per_column_scores: list[int], best_col=None):
+def inject(page, board_rect: dict, per_column_scores: list, best_col=None):
     """Показать оценки колонок поверх доски.
 
-    per_column_scores — точные оценки ходящего для каждой колонки
-    (например, из SolverEngine.best_column при игре с ядром).
+    per_column_scores — по элементу на колонку: int (точная оценка),
+    str (готовая метка, напр. 'BLOCK') или None (неизвестно -> '?').
     """
     labels = [
         {"text": label_text(s), "best": (best_col is not None and i == best_col)}
