@@ -53,6 +53,7 @@ class SessionState:
     turn_started_ts: float | None = None
     last_change_ts: float | None = None
     disconnect_reported: bool = False
+    moved_this_turn: bool = False   # мы уже сходили в этом ходу (щит от дубль-кликов)
 
 
 def _parse_timer(text: str | None) -> float | None:
@@ -128,8 +129,23 @@ class SessionManager:
             self.st.last_change_ts = now
             self.st.disconnect_reported = False
 
-        # передача хода нам => старт пер-ходового бюджета
-        if snap.my_turn and not self.st.my_turn:
+        # пер-ходовой бюджет: старт — когда ход ПЕРЕШЁЛ к нам. Основной сигнал —
+        # событие OPPONENT_MOVE (фишка соперника уже видна; «фронт» my_turn ловить
+        # не нужно — под нагрузкой цикл читает реже, окно пропускается, и дедлайн
+        # «стекал» в 0). Резервно — фронт False->True (ресинки/восстановление).
+        our_move_ev = any(e.kind == "OUR_MOVE" for e in events)
+        opp_move_ev = any(e.kind == "OPPONENT_MOVE" for e in events)
+        new_round_ev = any(e.kind in ("NEW_GAME", "NEW_ROUND") for e in events)
+        if our_move_ev:
+            self.st.turn_started_ts = None
+            self.st.moved_this_turn = True
+        elif opp_move_ev:
+            self.st.moved_this_turn = False
+            self.st.turn_started_ts = now        # ход соперника завершён => наш ход
+        elif new_round_ev:
+            self.st.moved_this_turn = False
+            self.st.turn_started_ts = now if snap.my_turn else None
+        elif snap.my_turn and not self.st.my_turn:
             self.st.turn_started_ts = now
         elif not snap.my_turn:
             self.st.turn_started_ts = None
@@ -140,13 +156,15 @@ class SessionManager:
         pos, mask, moves = from_grid(snap.grid, snap.my_turn)
         self.st.position, self.st.mask = int(pos), int(mask)
 
-        # таймеры и дисконнект (Q13)
-        left = _parse_timer(snap.timers.get("left"))
-        if left is not None:
-            if self.st.our_time_left_s != left:
+        # таймеры и дисконнект (Q13). ВАЖНО: наш таймер — на НАШЕЙ стороне
+        # (в матчмейкинге и гостем комнаты мы бываем справа — слева часы соперника)
+        _side = getattr(snap, "my_side", "left")
+        ours = _parse_timer(snap.timers.get("right" if _side == "right" else "left"))
+        if ours is not None:
+            if self.st.our_time_left_s != ours:
                 self.st.last_change_ts = now
                 self.st.disconnect_reported = False
-            self.st.our_time_left_s = left
+            self.st.our_time_left_s = ours
         self.prev_grid = [list(r) for r in snap.grid]
         if (self.st.last_change_ts is not None
                 and now - self.st.last_change_ts > DISCONNECT_IDLE_S

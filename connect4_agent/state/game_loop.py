@@ -254,7 +254,7 @@ class GameLoop:
                 self.persist()
                 if e.kind in ("GAME_OVER", "DISCONNECT") and self.ponder is not None:
                     self.ponder.stop()
-        if self.paused or not snap.my_turn:
+        if self.paused or not snap.my_turn or self.session.st.moved_this_turn:
             return None
 
         # Q4: не кликать раньше 500 мс после появления фишки соперника
