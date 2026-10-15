@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Мок-полигон PaperGames.io «Четыре в ряд» для офлайн-тестов браузерного слоя.
+     Визуальные инварианты из плана: доска #293441, наши фишки #17B99A,
+     соперника #F16775; наш профиль слева, соперник справа; активный игрок
+     отмечен зелёным кольцом; вокруг шапки — цифровые таймеры. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Connect4 Mock — PaperGames.io</title>
+<style>
+  body { margin: 0; background: #1b2430; font-family: sans-serif; color: #eee; }
+  #app { width: 720px; margin: 20px auto; }
+  #header { display: flex; justify-content: space-between; margin-bottom: 14px; }
+  .player { display: flex; align-items: center; gap: 10px; padding: 8px;
+            background: #222d3a; border-radius: 40px; min-width: 250px; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: #374151;
+            position: relative; }
+  .avatar.active::after { content: ""; position: absolute; inset: -4px;
+            border: 3px solid #17B99A; border-radius: 50%; }
+  .disk-sample { width: 18px; height: 18px; border-radius: 50%; }
+  .timer { font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: 6px;
+           background: #2b3646; }
+  .timer.active { background: #17B99A; color: #10231f; font-weight: bold; }
+  #board { background: #293441; border-radius: 12px; padding: 12px;
+           display: grid; grid-template-columns: repeat(7, 84px); gap: 8px; }
+  .cell { width: 84px; height: 84px; background: #1b2430; border-radius: 50%; }
+  .cell[data-owner="1"] { background: #17B99A; }
+  .cell[data-owner="2"] { background: #F16775; }
+  #status { margin-top: 10px; color: #9aa7b5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div class="player" id="player-left">
+      <div class="avatar active" id="avatar-me"></div>
+      <div class="disk-sample" style="background:#17B99A" id="disk-me"></div>
+      <div>
+        <div>Andrew</div>
+        <div class="timer active" id="timer-me">03:55</div>
+      </div>
+    </div>
+    <div class="player" id="player-right">
+      <div class="avatar" id="avatar-opp"></div>
+      <div class="disk-sample" style="background:#F16775" id="disk-opp"></div>
+      <div>
+        <div>Carlito</div>
+        <div class="timer" id="timer-opp">03:59</div>
+      </div>
+    </div>
+  </div>
+  <div id="board"></div>
+  <div id="status">mock-полигон: клик по колонке добавляет фишку</div>
+</div>
+<script>
+  const W = 7, H = 6;
+  const board = document.getElementById("board");
+  const state = { heights: new Array(W).fill(0), turn: 1, grid: Array.from({length: H}, () => new Array(W).fill(0)) };
+  // DOM: строки рисуем сверху вниз (визуальный ряд 6 -> 1)
+  for (let r = H - 1; r >= 0; r--) {
+    for (let c = 0; c < W; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.dataset.row = r; cell.dataset.col = c; cell.dataset.owner = "0";
+      cell.id = `cell-${r}-${c}`;
+      board.appendChild(cell);
+    }
+  }
+  function refreshHeader() {
+    document.getElementById("avatar-me").classList.toggle("active", state.turn === 1);
+    document.getElementById("avatar-opp").classList.toggle("active", state.turn === 2);
+    document.getElementById("timer-me").classList.toggle("active", state.turn === 1);
+    document.getElementById("timer-opp").classList.toggle("active", state.turn === 2);
+  }
+  board.addEventListener("click", (e) => {
+    const cell = e.target.closest(".cell");
+    if (!cell) return;
+    const c = +cell.dataset.col;
+    const h = state.heights[c];
+    if (h >= H) return;
+    state.grid[h][c] = state.turn;
+    document.getElementById(`cell-${h}-${c}`).dataset.owner = String(state.turn);
+    state.heights[c] = h + 1;
+    state.turn = 3 - state.turn;
+    refreshHeader();
+  });
+  window.mockGame = state;
+  refreshHeader();
+</script>
+</body>
+</html>
