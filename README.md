@@ -1,13 +1,23 @@
-# connect4_agent
+<div align="center">
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+# connect4_agent: Exact-Play Connect 4 Engine & Live Benchmark Harness
+
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 [![Engine gate](https://img.shields.io/badge/engine_gate-6%2F6_sets_100%25-brightgreen.svg)](#key-metrics)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#quick-start-offline)
 
 [Русская версия](README.ru.md)
 
-**An exact-play Connect 4 engine with a multi-threaded search core and a live vision/CDP benchmark harness.**
+> An exact-play Connect 4 engine with a multi-threaded search core and a live vision/CDP benchmark harness.
+
+<img src="connect4_agent/docs/assets/demo_overlay.png" alt="Live overlay demo" width="700"/>
+
+*Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overlay during a live game.*
+
+</div>
+
+---
 
 ## What this is
 
@@ -28,11 +38,7 @@ This project is systems engineering in three layers:
 The live harness is used as a *real-environment test bench*: it exercises the engine and the CV
 pipeline under real rendering, animations, network latency and a real interface.
 
-## Demo
-
-![demo](connect4_agent/docs/assets/demo_overlay.png)
-
-Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overlay during a live game.
+---
 
 ## Key metrics
 
@@ -46,7 +52,11 @@ Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overl
 | Live series vs the site's strongest bot | 30 games: **16 W / 12 L / 2 D**; **8/8 as first player** (8/22 as second) |
 | Control run after the buffer-race fix | 10 games: **5 W / 5 L** — the outcome tracked the starting player exactly; zero watchdogs, every click confirmed on attempt 1 |
 
-## Before / after (measured on the live bench)
+---
+
+## Before / after
+
+*Measured on the live bench — real rendering, animations, network latency:*
 
 | Stage | First working version | Hardened version | Measured effect |
 |---|---|---|---|
@@ -55,6 +65,8 @@ Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overl
 | Click verification | global stone counter (racy vs a simultaneous opponent move) | count of *our* stones + turn hand-off | no false retries, no duplicate placements |
 | Site timing traps | strict ±0 ownership invariant | tolerance `abs(balance) ≤ 1` + 6 s phantom-move watchdog | dead forfeits eliminated (was 150+ false triggers per game) |
 | Board vision | single color threshold on the plate | 35%-of-max profile threshold + aspect repair | **42/42 cells** at 100% and 125% display scale |
+
+---
 
 ## Architecture
 
@@ -87,18 +99,7 @@ flowchart LR
     CDP --> UI
 ```
 
-Repository layout:
-
-```
-connect4_agent/
-  engine/       bitboard, Numba solver, lockless TT, opening-book loader, ponder manager
-  browser/      CDP connector, DOM reader, vision fallback, overlay, CDP input
-  actuator/     physical mouse controller, global hotkeys
-  state/        session tracker, game loop, incident dumps, bot PID lock
-  tools/        live probes, robot-game driver, series runner
-  tests/        offline suites (mocked page, no browser needed) + benchmark runners
-  docs/         engineering log, demo asset
-```
+---
 
 ## Engineering highlights
 
@@ -124,7 +125,25 @@ Four cases from the live bench — full write-ups in
   reader in live play. The reader now works on visible geometry and classes, and the ownership
   check tolerates `abs(balance) ≤ 1` with a phantom-move watchdog.
 
-## Quick start (offline)
+---
+
+## Project structure
+
+```
+connect4_agent/
+├── engine/       # bitboard, Numba solver, lockless TT, opening-book loader, ponder manager
+├── browser/      # CDP connector, DOM reader, vision fallback, overlay, CDP input
+├── actuator/     # physical mouse controller, global hotkeys
+├── state/        # session tracker, game loop, incident dumps, bot PID lock
+├── tools/        # live probes, robot-game driver, series runner
+├── tests/        # offline suites (mocked page, no browser needed) + benchmark runners
+├── docs/         # engineering log, demo asset
+└── run.py        # entry point (selftest / live)
+```
+
+---
+
+## Quick start
 
 ```bash
 py -3 -m venv .venv
@@ -147,6 +166,8 @@ directly, nothing is auto-loaded. [`.env.example`](.env.example) documents the f
 | `C4_INCIDENTS_DIR` | `logs/incidents` | where incident dumps are written |
 | `C4_TOAST` | bundled toast script | helper invoked between series runs by `tools/acceptance_series.py` |
 
+---
+
 ## Live harness (optional)
 
 ```bash
@@ -158,6 +179,8 @@ msedge.exe --remote-debugging-port=9222        # or any Chromium-based browser
 Input mode is `cdp` by default (the OS cursor is never touched and the window does not need
 focus); `INPUT_MODE = "physical"` in `config.py` switches to the pyautogui fallback.
 
+---
+
 ## Opening book (not shipped)
 
 The engine reaches full strength with an optional opening book (16.5M positions, compact `.npz`,
@@ -165,6 +188,8 @@ The engine reaches full strength with an optional opening book (16.5M positions,
 under **AGPL-3.0** and is not redistributable inside this MIT-licensed project. The loader
 (`engine/opening_book.py`) documents the file format; the engine also plays standalone without it
 (the decision cascade falls back to the exact solver).
+
+---
 
 ## Acknowledgments & disclaimer
 
@@ -174,6 +199,8 @@ under **AGPL-3.0** and is not redistributable inside this MIT-licensed project. 
 - This project is for **research and benchmarking purposes**. Automating third-party services may
   violate their terms of use; use it only where you are authorized (for example, on your own
   account) and at your own risk.
+
+---
 
 ## License
 
