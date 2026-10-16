@@ -96,7 +96,6 @@ class PonderManager:
         for t in self._threads:
             t.join(timeout=timeout)
         self._threads = []
-        self._stop.clear()
 
     def notify_move(self, col):
         """Соперник сходил в col. Возвращает точную оценку новой позиции или None."""

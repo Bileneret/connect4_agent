@@ -136,7 +136,7 @@ connect4_agent/
 ├── actuator/     # physical mouse controller, global hotkeys
 ├── state/        # session tracker, game loop, incident dumps, bot PID lock
 ├── tools/        # live probes, robot-game driver, series runner
-├── tests/        # offline suites (mocked page, no browser needed) + benchmark runners
+├── tests/        # offline suites (mocked page; run via pytest) + benchmark runners
 ├── docs/         # engineering log, demo asset
 └── run.py        # entry point (selftest / live)
 ```
@@ -149,10 +149,13 @@ connect4_agent/
 py -3 -m venv .venv
 .venv\Scripts\python -m pip install -r connect4_agent/requirements.txt
 .venv\Scripts\python connect4_agent/run.py --selftest        # engine warm-up + sanity values
-.venv\Scripts\python connect4_agent/tests/test_stage5_offline.py   # and the other *_offline suites
+.venv\Scripts\python -m pytest connect4_agent/tests                # all offline suites (recommended)
+.venv\Scripts\python connect4_agent/tests/test_stage5_offline.py   # single suite, file-by-file
 ```
 
-All `*_offline` suites are self-contained (mocked page, no browser, no network).
+All `*_offline` suites are self-contained (mocked page, no network) and run under plain
+`pytest connect4_agent/tests`. Launched file-by-file (as above), two of them — `test_cdp_offline`
+and `test_stage5_offline` — also drive an installed Chromium headlessly against the local fixture page.
 
 ### Configuration
 

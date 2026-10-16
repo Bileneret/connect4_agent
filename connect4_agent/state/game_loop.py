@@ -126,7 +126,12 @@ def decide_move(engine, book, position, mask, moves, deadline_ts,
         try:
             t0 = time.time()
             n0 = engine.nodes
-            res = engine.best_column(position, mask, moves)  # (col, best, [(col,score)...])
+            # Свой scratch на каждый расчёт: поток, не уложившийся в бюджет,
+            # не прерывается, и следующий ход может считать параллельно —
+            # на общих инстанс-буферах это дало бы гонку сортировки ходов
+            # (класс бага из ENGINEERING_LOG §1).
+            scratch = engine.make_scratch()
+            res = engine.best_column(position, mask, moves, scratch=scratch)  # (col, best, [(col,score)...])
             dt = max(1e-6, time.time() - t0)
             rate = (engine.nodes - n0) / dt / 1e6
             box["r"] = (int(res[0]), int(res[1]), res[2], rate)

@@ -135,7 +135,7 @@ connect4_agent/
 ├── actuator/     # физическая мышь, глобальные хоткеи
 ├── state/        # сессия, игровой цикл, дампы инцидентов, PID-локфайл бота
 ├── tools/        # живые зонды, драйвер робо-игр, раннер серий
-├── tests/        # офлайн-наборы (мок страницы, браузер не нужен) + бенчмарк-раннеры
+├── tests/        # офлайн-наборы (мок страницы; запуск через pytest) + бенчмарк-раннеры
 ├── docs/         # инженерный постмортем, демо-ассет
 └── run.py        # точка входа (selftest / live)
 ```
@@ -148,10 +148,13 @@ connect4_agent/
 py -3 -m venv .venv
 .venv\Scripts\python -m pip install -r connect4_agent/requirements.txt
 .venv\Scripts\python connect4_agent/run.py --selftest        # прогрев ядра + контрольные значения
-.venv\Scripts\python connect4_agent/tests/test_stage5_offline.py   # и остальные *_offline наборы
+.venv\Scripts\python -m pytest connect4_agent/tests                # все офлайн-наборы (рекомендуется)
+.venv\Scripts\python connect4_agent/tests/test_stage5_offline.py   # отдельный набор, по файлу
 ```
 
-Все наборы `*_offline` самодостаточны (мок страницы, без браузера и сети).
+Все наборы `*_offline` самодостаточны (мок страницы, без сети) и запускаются обычным
+`pytest connect4_agent/tests`. При запуске по файлам (выше) два из них — `test_cdp_offline`
+и `test_stage5_offline` — дополнительно гоняют установленный Chromium в headless против локальной страницы-фикстуры.
 
 ### Конфигурация
 
