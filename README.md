@@ -43,7 +43,8 @@ Per-column exact scores (`WIN`/`LOSS`/`DRAW` with distance) rendered as an overl
 | Transposition table | 16 B/entry, lockless; packed entry + `key ^ entry` verification |
 | Live click round-trip (CDP) | **0.6–0.8 s** (single flight + atomic click; was 17–22 s before optimization) |
 | Vision fallback | **42/42 cells** vs DOM, at 125% and 100% display scale |
-| Live series vs the site's strongest bot | 20 games: **11 W / 7 L / 2 D**; **3/3 as first player** |
+| Live series vs the site's strongest bot | 30 games: **16 W / 12 L / 2 D**; **8/8 as first player** (8/22 as second) |
+| Control run after the buffer-race fix | 10 games: **5 W / 5 L** — the outcome tracked the starting player exactly; zero watchdogs, every click confirmed on attempt 1 |
 
 ## Before / after (measured on the live bench)
 
