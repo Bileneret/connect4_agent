@@ -6,9 +6,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 [![Engine gate](https://img.shields.io/badge/engine_gate-6%2F6_sets_100%25-brightgreen.svg)](#key-metrics)
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://vshymanskyy.github.io/StandWithUkraine/)
+
+<a href="https://vshymanskyy.github.io/StandWithUkraine/">
+  <img src="https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg" width="450" alt="Stand With Ukraine">
+</a>
+
+---
 
 [Русская версия](README.ru.md)
 
+---
 > An exact-play Connect 4 engine with a multi-threaded search core and a live vision/CDP benchmark harness.
 
 <img src="connect4_agent/docs/assets/demo_overlay.png" alt="Live overlay demo" width="700"/>
