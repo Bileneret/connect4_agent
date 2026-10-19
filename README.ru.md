@@ -6,8 +6,17 @@
 [![Лицензия: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Платформа](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 [![Гейт движка](https://img.shields.io/badge/engine_gate-6%2F6_sets_100%25-brightgreen.svg)](#ключевые-метрики)
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://vshymanskyy.github.io/StandWithUkraine/)
+
+<a href="https://vshymanskyy.github.io/StandWithUkraine/">
+  <img src="https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg" width="450" alt="Stand With Ukraine">
+</a>
+
+---
 
 [English version](README.md)
+
+---
 
 > Движок «Четыре в ряд» с точной игрой, многопоточным ядром поиска и живым стендом компьютерного зрения и ввода через CDP.
 
